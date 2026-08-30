@@ -1,5 +1,8 @@
+import 'dart:typed_data';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,11 +10,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'l10n/strings.dart';
 import 'models/chapter.dart';
 import 'providers/azure_provider.dart';
+import 'providers/edge_provider.dart';
 import 'providers/google_provider.dart';
 import 'providers/tts_provider.dart';
 import 'services/audio_generator.dart';
 import 'services/credential_store.dart';
 import 'services/document_reader.dart';
+import 'services/output_directory_service.dart';
 import 'services/text_splitter.dart';
 
 void main() => runApp(const TtsMobileApp());
@@ -31,6 +36,11 @@ class _TtsMobileAppState extends State<TtsMobileApp> {
         debugShowCheckedModeBanner: false,
         locale: locale,
         supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
         title: 'TTS Text to MP3',
         theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
         home: HomeScreen(
@@ -54,14 +64,22 @@ class _HomeScreenState extends State<HomeScreen> {
   final _player = AudioPlayer();
 
   String _providerName = 'azure';
+  String _textEncoding = 'auto';
   bool _persist = true;
   bool _splitByChars = false;
   bool _busy = false;
+  bool _showLimitations = true;
   String? _fileName;
+  Uint8List? _fileBytes;
+  String? _outputDirectory;
+  String? _outputDirectoryLabel;
   List<Chapter> _chapters = const [];
   List<VoiceInfo> _voices = const [];
+  String? _voiceLocale;
   VoiceInfo? _voice;
   int? _selectedIndex;
+  int? _resumeIndex;
+  final List<String> _generatedPaths = [];
   String _status = '';
 
   @override
@@ -90,11 +108,22 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
     setState(() {
       _providerName = provider;
+      _textEncoding = prefs.getString('text_encoding') ?? 'auto';
+      if (!DocumentReader.textEncodings.contains(_textEncoding)) {
+        _textEncoding = 'auto';
+      }
       _keyController.text = key;
       _regionController.text = region;
       _splitByChars = prefs.getBool('split_by_chars') ?? false;
       _charsController.text = (prefs.getInt('max_chars') ?? 5000).toString();
+      _showLimitations = prefs.getBool('show_mobile_limitations') ?? true;
+      _outputDirectory = prefs.getString('output_directory');
+      _outputDirectoryLabel = prefs.getString('output_directory_label');
     });
+    if (provider == 'edge' ||
+        (key.isNotEmpty && (provider != 'azure' || region.isNotEmpty))) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadVoices());
+    }
   }
 
   Future<void> _selectFile() async {
@@ -108,16 +137,88 @@ class _HomeScreenState extends State<HomeScreen> {
       final file = result.files.single;
       final bytes = file.bytes;
       if (bytes == null) throw const FormatException('Could not read file.');
-      final chapters = await DocumentReader.read(file.name, bytes);
+      final chapters = await DocumentReader.read(
+        file.name,
+        bytes,
+        textEncoding: _textEncoding,
+      );
       if (!mounted) return;
       setState(() {
         _fileName = file.name;
+        _fileBytes = bytes;
         _chapters = chapters;
         _selectedIndex = null;
+        _resetGeneration();
       });
     } catch (error) {
       _showError(error);
     }
+  }
+
+  Future<void> _changeTextEncoding(String encoding) async {
+    final name = _fileName;
+    final bytes = _fileBytes;
+    if (name == null || bytes == null || !name.toLowerCase().endsWith('.txt')) {
+      setState(() => _textEncoding = encoding);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('text_encoding', encoding);
+      return;
+    }
+    await _run(() async {
+      final chapters = await DocumentReader.read(
+        name,
+        bytes,
+        textEncoding: encoding,
+      );
+      if (!mounted) return;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('text_encoding', encoding);
+      setState(() {
+        _textEncoding = encoding;
+        _chapters = chapters;
+        _selectedIndex = null;
+        _resetGeneration();
+        _status = s.get('encodingReloaded');
+      });
+    });
+  }
+
+  void _resetGeneration() {
+    _resumeIndex = null;
+    _generatedPaths.clear();
+  }
+
+  Future<void> _selectOutputDirectory() async {
+    try {
+      final selected = await OutputDirectoryService.select();
+      if (selected == null) return;
+      await OutputDirectoryService.verify(selected.id);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('output_directory', selected.id);
+      await prefs.setString('output_directory_label', selected.label);
+      if (!mounted) return;
+      setState(() {
+        _outputDirectory = selected.id;
+        _outputDirectoryLabel = selected.label;
+        _resetGeneration();
+        _status = s.get('outputSelected');
+      });
+    } catch (_) {
+      _showError(s.get('outputNotWritable'));
+    }
+  }
+
+  Future<void> _clearOutputDirectory() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('output_directory');
+    await prefs.remove('output_directory_label');
+    if (!mounted) return;
+    setState(() {
+      _outputDirectory = null;
+      _outputDirectoryLabel = null;
+      _resetGeneration();
+      _status = '';
+    });
   }
 
   List<Chapter> get _units {
@@ -128,6 +229,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<TtsProvider> _provider() async {
+    if (_providerName == 'edge') return EdgeProvider();
     final key = _keyController.text.trim();
     if (key.isEmpty) throw const TtsProviderException('API key is required.');
     await _credentials.write(
@@ -147,15 +249,38 @@ class _HomeScreenState extends State<HomeScreen> {
     return GoogleProvider(apiKey: key);
   }
 
+  List<String> get _voiceLocales =>
+      _voices.map((voice) => voice.locale).toSet().toList()..sort();
+
+  List<VoiceInfo> get _filteredVoices => _voiceLocale == null
+      ? const []
+      : _voices.where((voice) => voice.locale == _voiceLocale).toList();
+
+  String _preferredVoiceLocale(List<VoiceInfo> voices) {
+    final language = Localizations.localeOf(context).languageCode;
+    final preferred = switch (language) {
+      'ja' => 'ja-JP',
+      'zh' => 'zh-CN',
+      _ => 'en-US',
+    };
+    return voices.any((voice) => voice.locale == preferred)
+        ? preferred
+        : voices.first.locale;
+  }
+
   Future<void> _loadVoices() async => _run(() async {
         final provider = await _provider();
         final voices = await provider.listVoices();
         voices.sort(
             (a, b) => '${a.locale}${a.name}'.compareTo('${b.locale}${b.name}'));
         if (!mounted) return;
+        final locale = voices.isEmpty ? null : _preferredVoiceLocale(voices);
+        final matching =
+            voices.where((voice) => voice.locale == locale).toList();
         setState(() {
           _voices = voices;
-          _voice = voices.isEmpty ? null : voices.first;
+          _voiceLocale = locale;
+          _voice = matching.isEmpty ? null : matching.first;
           _status = '${voices.length} voices';
         });
       });
@@ -165,11 +290,11 @@ class _HomeScreenState extends State<HomeScreen> {
     await _run(() async {
       final units = _units;
       if (units.isEmpty) {
-        throw const FormatException('Enter a positive character count.');
+        throw FormatException(s.get('invalidChars'));
       }
       final voice = _voice;
       if (voice == null) {
-        throw const TtsProviderException('Load and select a voice first.');
+        throw TtsProviderException(s.get('voiceRequired'));
       }
       final unit = units[(_selectedIndex ?? 0).clamp(0, units.length - 1)];
       final provider = await _provider();
@@ -182,30 +307,98 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  Future<void> _generate() async {
+  Future<void> _generate({bool resume = false}) async {
     if (_chapters.isEmpty) return _showError(s.get('noFile'));
     await _run(() async {
       final units = _units;
       if (units.isEmpty) {
-        throw const FormatException('Enter a positive character count.');
+        throw FormatException(s.get('invalidChars'));
       }
       final voice = _voice;
       if (voice == null) {
-        throw const TtsProviderException('Load and select a voice first.');
+        throw TtsProviderException(s.get('voiceRequired'));
+      }
+      final outputDirectory = _outputDirectory;
+      if (outputDirectory != null) {
+        try {
+          await OutputDirectoryService.verify(outputDirectory);
+        } catch (_) {
+          throw TtsProviderException(s.get('outputNotWritable'));
+        }
+      }
+      final startIndex = resume ? (_resumeIndex ?? 0) : 0;
+      if (!resume) {
+        _generatedPaths.clear();
+        _resumeIndex = 0;
       }
       final provider = await _provider();
       final paths = await AudioGenerator.generateAll(
         provider,
         units,
         voice.name,
+        outputDirectory: outputDirectory == null ||
+                OutputDirectoryService.isAndroidDocumentTree(outputDirectory)
+            ? null
+            : outputDirectory,
+        fileWriter: outputDirectory != null &&
+                OutputDirectoryService.isAndroidDocumentTree(outputDirectory)
+            ? (filename, bytes) => OutputDirectoryService.writeFile(
+                  outputDirectory,
+                  filename,
+                  bytes,
+                )
+            : null,
+        startIndex: startIndex,
+        existingPaths: _generatedPaths,
         onProgress: (current, total) {
           if (mounted) setState(() => _status = '$current / $total');
         },
+        onFileGenerated: (path, current, total) {
+          if (!mounted) return;
+          setState(() {
+            if (!_generatedPaths.contains(path)) _generatedPaths.add(path);
+            _resumeIndex = current < total ? current : null;
+          });
+        },
       );
       if (!mounted) return;
-      setState(() => _status = s.get('done'));
-      await Share.shareXFiles(paths.map(XFile.new).toList());
+      setState(() {
+        _resumeIndex = null;
+        _status = s.get('done');
+      });
+      if (outputDirectory == null) {
+        await Share.shareXFiles(paths.map(XFile.new).toList());
+        if (!mounted) return;
+        await _askDeleteSharedFiles(paths);
+      }
     });
+  }
+
+  Future<void> _askDeleteSharedFiles(List<String> paths) async {
+    final delete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(s.get('deleteSharedTitle')),
+        content: Text(s.get('deleteSharedMessage')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(s.get('keepFiles')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(s.get('deleteFiles')),
+          ),
+        ],
+      ),
+    );
+    if (delete == true) {
+      await AudioGenerator.deleteFiles(paths);
+      _generatedPaths.clear();
+      if (mounted) setState(() => _status = s.get('filesDeleted'));
+    } else if (mounted) {
+      setState(() => _status = s.get('filesKept'));
+    }
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -265,19 +458,65 @@ class _HomeScreenState extends State<HomeScreen> {
                 onPressed: _busy ? null : _selectFile,
                 child: Text(s.get('choose'))),
           ]),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            key: ValueKey('text-encoding-$_textEncoding'),
+            initialValue: _textEncoding,
+            decoration: InputDecoration(labelText: s.get('textEncoding')),
+            items: DocumentReader.textEncodings
+                .map((encoding) => DropdownMenuItem(
+                      value: encoding,
+                      child: Text(s.get('encoding_$encoding')),
+                    ))
+                .toList(),
+            onChanged: _busy
+                ? null
+                : (encoding) {
+                    if (encoding != null) _changeTextEncoding(encoding);
+                  },
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _busy ? null : _selectOutputDirectory,
+                  icon: const Icon(Icons.folder_open),
+                  label: Text(s.get('selectOutput')),
+                ),
+              ),
+              if (_outputDirectory != null)
+                IconButton(
+                  tooltip: s.get('clearOutput'),
+                  onPressed: _busy ? null : _clearOutputDirectory,
+                  icon: const Icon(Icons.close),
+                ),
+            ],
+          ),
+          Text(
+            _outputDirectoryLabel ??
+                _outputDirectory ??
+                s.get('outputNotSelected'),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           const SizedBox(height: 16),
           Text(s.get('provider'),
               style: Theme.of(context).textTheme.titleMedium),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'azure', label: Text('Azure Speech')),
-              ButtonSegment(value: 'google', label: Text('Google Cloud TTS')),
+          DropdownButtonFormField<String>(
+            initialValue: _providerName,
+            decoration: InputDecoration(labelText: s.get('provider')),
+            items: const [
+              DropdownMenuItem(value: 'edge', child: Text('Edge TTS')),
+              DropdownMenuItem(value: 'azure', child: Text('Azure Speech')),
+              DropdownMenuItem(
+                  value: 'google', child: Text('Google Cloud TTS')),
             ],
-            selected: {_providerName},
-            onSelectionChanged: _busy
+            onChanged: _busy
                 ? null
-                : (values) async {
-                    final provider = values.first;
+                : (provider) async {
+                    if (provider == null) return;
                     final key =
                         await _credentials.read(provider, 'api_key') ?? '';
                     final region =
@@ -287,37 +526,46 @@ class _HomeScreenState extends State<HomeScreen> {
                       _keyController.text = key;
                       _regionController.text = region;
                       _voices = const [];
+                      _voiceLocale = null;
                       _voice = null;
                     });
+                    if (provider == 'edge' ||
+                        (key.isNotEmpty &&
+                            (provider != 'azure' || region.isNotEmpty))) {
+                      await _loadVoices();
+                    }
                   },
           ),
           const SizedBox(height: 8),
-          TextField(
-              controller: _keyController,
-              obscureText: true,
-              autocorrect: false,
-              enableSuggestions: false,
-              decoration: InputDecoration(labelText: s.get('apiKey'))),
+          if (_providerName != 'edge')
+            TextField(
+                controller: _keyController,
+                obscureText: true,
+                autocorrect: false,
+                enableSuggestions: false,
+                decoration: InputDecoration(labelText: s.get('apiKey'))),
           if (_providerName == 'azure')
             TextField(
                 controller: _regionController,
                 autocorrect: false,
                 decoration: InputDecoration(labelText: s.get('region'))),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            value: _persist,
-            title: Text(s.get('persist')),
-            onChanged: (value) => setState(() => _persist = value),
-          ),
-          TextButton.icon(
-            onPressed: () async {
-              await _credentials.deleteProvider(_providerName);
-              _keyController.clear();
-              if (_providerName == 'azure') _regionController.clear();
-            },
-            icon: const Icon(Icons.delete_outline),
-            label: Text(s.get('forget')),
-          ),
+          if (_providerName != 'edge') ...[
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _persist,
+              title: Text(s.get('persist')),
+              onChanged: (value) => setState(() => _persist = value),
+            ),
+            TextButton.icon(
+              onPressed: () async {
+                await _credentials.deleteProvider(_providerName);
+                _keyController.clear();
+                if (_providerName == 'azure') _regionController.clear();
+              },
+              icon: const Icon(Icons.delete_outline),
+              label: Text(s.get('forget')),
+            ),
+          ],
           const Divider(height: 32),
           Text(s.get('split'), style: Theme.of(context).textTheme.titleMedium),
           SegmentedButton<bool>(
@@ -326,33 +574,62 @@ class _HomeScreenState extends State<HomeScreen> {
               ButtonSegment(value: true, label: Text(s.get('chars'))),
             ],
             selected: {_splitByChars},
-            onSelectionChanged: (values) =>
-                setState(() => _splitByChars = values.first),
+            onSelectionChanged: _busy
+                ? null
+                : (values) => setState(() {
+                      _splitByChars = values.first;
+                      _resetGeneration();
+                    }),
           ),
           if (_splitByChars)
             TextField(
                 controller: _charsController,
+                enabled: !_busy,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(labelText: s.get('maxChars')),
-                onChanged: (_) => setState(() {})),
+                onChanged: (_) => setState(_resetGeneration)),
           const SizedBox(height: 8),
           OutlinedButton(
               onPressed: _busy ? null : _loadVoices,
               child: Text(s.get('loadVoices'))),
-          if (_voices.isNotEmpty)
+          if (_voices.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(s.get('voiceNotLoaded')),
+            )
+          else ...[
+            DropdownButtonFormField<String>(
+              key: ValueKey('voice-locale-$_voiceLocale'),
+              initialValue: _voiceLocale,
+              isExpanded: true,
+              decoration: InputDecoration(labelText: s.get('voiceLanguage')),
+              items: _voiceLocales
+                  .map((locale) =>
+                      DropdownMenuItem(value: locale, child: Text(locale)))
+                  .toList(),
+              onChanged: (locale) {
+                if (locale == null) return;
+                setState(() {
+                  _voiceLocale = locale;
+                  _voice = _voices.firstWhere(
+                    (voice) => voice.locale == locale,
+                  );
+                });
+              },
+            ),
             DropdownButtonFormField<VoiceInfo>(
               key: ValueKey(_voice),
               initialValue: _voice,
               isExpanded: true,
               decoration: InputDecoration(labelText: s.get('voice')),
-              items: _voices
+              items: _filteredVoices
                   .map((voice) => DropdownMenuItem(
                       value: voice,
-                      child: Text('${voice.locale} · ${voice.name}',
-                          overflow: TextOverflow.ellipsis)))
+                      child: Text(voice.name, overflow: TextOverflow.ellipsis)))
                   .toList(),
               onChanged: (value) => setState(() => _voice = value),
             ),
+          ],
           if (units.isNotEmpty) ...[
             const SizedBox(height: 12),
             SizedBox(
@@ -373,19 +650,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ],
-          Row(children: [
-            Expanded(
-                child: OutlinedButton.icon(
-                    onPressed: _busy ? null : _preview,
-                    icon: const Icon(Icons.play_arrow),
-                    label: Text(s.get('preview')))),
-            const SizedBox(width: 8),
-            Expanded(
-                child: FilledButton.icon(
-                    onPressed: _busy ? null : _generate,
-                    icon: const Icon(Icons.download),
-                    label: Text(s.get('generate')))),
-          ]),
           if (_busy)
             const Padding(
                 padding: EdgeInsets.only(top: 12),
@@ -395,12 +659,44 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(_status, textAlign: TextAlign.center)),
           const Divider(height: 32),
-          ListTile(
-            leading: const Icon(Icons.info_outline),
-            title: Text(s.get('unsupported')),
-            subtitle: Text(s.get('limitations')),
-          ),
+          if (_showLimitations)
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: Text(s.get('unsupported')),
+                subtitle: Text(s.get('limitations')),
+                trailing: IconButton(
+                  tooltip: s.get('hide'),
+                  icon: const Icon(Icons.close),
+                  onPressed: () async {
+                    setState(() => _showLimitations = false);
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setBool('show_mobile_limitations', false);
+                  },
+                ),
+              ),
+            ),
         ],
+      ),
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        child: Row(children: [
+          Expanded(
+              child: OutlinedButton.icon(
+                  onPressed: _busy ? null : _preview,
+                  icon: const Icon(Icons.play_arrow),
+                  label: Text(s.get('preview')))),
+          const SizedBox(width: 8),
+          Expanded(
+              child: FilledButton.icon(
+                  onPressed: _busy
+                      ? null
+                      : () => _generate(resume: _resumeIndex != null),
+                  icon: const Icon(Icons.download),
+                  label: Text(_resumeIndex == null
+                      ? s.get('generate')
+                      : s.get('resumeGenerate')))),
+        ]),
       ),
     );
   }

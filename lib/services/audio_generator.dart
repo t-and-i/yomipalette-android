@@ -38,24 +38,80 @@ class AudioGenerator {
     TtsProvider provider,
     List<Chapter> units,
     String voice, {
+    String? outputDirectory,
+    Future<String> Function(String filename, Uint8List bytes)? fileWriter,
+    int startIndex = 0,
+    List<String> existingPaths = const [],
     void Function(int current, int total)? onProgress,
+    void Function(String path, int current, int total)? onFileGenerated,
   }) async {
-    final root = await getApplicationDocumentsDirectory();
-    final output = Directory(path.join(root.path, 'TTS Text to MP3'));
-    await output.create(recursive: true);
-    final paths = <String>[];
-    for (var index = 0; index < units.length; index++) {
+    if (startIndex < 0 || startIndex > units.length) {
+      throw RangeError.range(startIndex, 0, units.length, 'startIndex');
+    }
+    final output = outputDirectory == null && fileWriter == null
+        ? Directory(path.join(
+            (await getApplicationDocumentsDirectory()).path,
+            'TTS Text to MP3',
+          ))
+        : outputDirectory == null
+            ? null
+            : Directory(outputDirectory);
+    await output?.create(recursive: true);
+    final paths = List<String>.from(existingPaths);
+    for (var index = startIndex; index < units.length; index++) {
       final unit = units[index];
       final bytes = await synthesizeLong(provider, unit.text, voice);
       final safeTitle =
           unit.title.replaceAll(RegExp(r'[\\/:*?"<>|\r\n\t]'), '_');
       final filename =
           '${unit.index.toString().padLeft(3, '0')}_${safeTitle.isEmpty ? 'untitled' : safeTitle}.mp3';
-      final file = File(path.join(output.path, filename));
-      await file.writeAsBytes(bytes, flush: true);
-      paths.add(file.path);
+      final savedPath = fileWriter == null
+          ? await _writeFile(output!, filename, bytes)
+          : await fileWriter(filename, bytes);
+      paths.add(savedPath);
       onProgress?.call(index + 1, units.length);
+      onFileGenerated?.call(savedPath, index + 1, units.length);
     }
     return paths;
+  }
+
+  static Future<String> _writeFile(
+    Directory output,
+    String filename,
+    Uint8List bytes,
+  ) async {
+    final file = File(path.join(output.path, filename));
+    await file.writeAsBytes(bytes, flush: true);
+    return file.path;
+  }
+
+  static Future<void> verifyWritableDirectory(String directoryPath) async {
+    final directory = Directory(directoryPath);
+    if (!await directory.exists()) {
+      throw FileSystemException(
+          'The selected folder does not exist.', directoryPath);
+    }
+    final probe = File(path.join(
+      directory.path,
+      '.tts-text-mp3-write-test-${DateTime.now().microsecondsSinceEpoch}',
+    ));
+    try {
+      await probe.writeAsString('write test', flush: true);
+    } on FileSystemException catch (error) {
+      throw FileSystemException(
+        'The selected folder is not writable.',
+        directoryPath,
+        error.osError,
+      );
+    } finally {
+      if (await probe.exists()) await probe.delete();
+    }
+  }
+
+  static Future<void> deleteFiles(Iterable<String> paths) async {
+    for (final filePath in paths) {
+      final file = File(filePath);
+      if (await file.exists()) await file.delete();
+    }
   }
 }
