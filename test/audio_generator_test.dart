@@ -70,6 +70,44 @@ void main() {
     expect(first.existsSync(), isFalse);
     expect(second.existsSync(), isFalse);
   });
+
+  test('audio adjustments are forwarded to every synthesized chunk', () async {
+    final provider = _RecordingProvider();
+    final text = 'a' * (AudioGenerator.providerChunkSize + 1);
+
+    await AudioGenerator.synthesizeLong(
+      provider,
+      text,
+      'voice',
+      rate: 1.25,
+      volume: -10,
+      pitch: 7,
+    );
+
+    expect(provider.settings, [
+      (rate: 1.25, volume: -10.0, pitch: 7.0),
+      (rate: 1.25, volume: -10.0, pitch: 7.0),
+    ]);
+  });
+}
+
+class _RecordingProvider implements TtsProvider {
+  final settings = <({double rate, double volume, double pitch})>[];
+
+  @override
+  Future<List<VoiceInfo>> listVoices() async => const [];
+
+  @override
+  Future<Uint8List> synthesize(
+    String text,
+    String voice, {
+    double rate = 1,
+    double volume = 0,
+    double pitch = 0,
+  }) async {
+    settings.add((rate: rate, volume: volume, pitch: pitch));
+    return Uint8List.fromList([1]);
+  }
 }
 
 class _FailingProvider implements TtsProvider {

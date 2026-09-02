@@ -69,6 +69,9 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _splitByChars = false;
   bool _busy = false;
   bool _showLimitations = true;
+  double _ratePercent = 0;
+  double _volumePercent = 0;
+  double _pitchHz = 0;
   String? _fileName;
   Uint8List? _fileBytes;
   String? _outputDirectory;
@@ -79,6 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
   VoiceInfo? _voice;
   int? _selectedIndex;
   int? _resumeIndex;
+  final Set<int> _checkedUnitIndices = {};
   final List<String> _generatedPaths = [];
   String _status = '';
 
@@ -117,6 +121,9 @@ class _HomeScreenState extends State<HomeScreen> {
       _splitByChars = prefs.getBool('split_by_chars') ?? false;
       _charsController.text = (prefs.getInt('max_chars') ?? 5000).toString();
       _showLimitations = prefs.getBool('show_mobile_limitations') ?? true;
+      _ratePercent = prefs.getDouble('rate_percent') ?? 0;
+      _volumePercent = prefs.getDouble('volume_percent') ?? 0;
+      _pitchHz = prefs.getDouble('pitch_hz') ?? 0;
       _outputDirectory = prefs.getString('output_directory');
       _outputDirectoryLabel = prefs.getString('output_directory_label');
     });
@@ -148,7 +155,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _fileBytes = bytes;
         _chapters = chapters;
         _selectedIndex = null;
-        _resetGeneration();
+        _resetGeneration(resetChecks: true);
       });
     } catch (error) {
       _showError(error);
@@ -177,15 +184,20 @@ class _HomeScreenState extends State<HomeScreen> {
         _textEncoding = encoding;
         _chapters = chapters;
         _selectedIndex = null;
-        _resetGeneration();
+        _resetGeneration(resetChecks: true);
         _status = s.get('encodingReloaded');
       });
     });
   }
 
-  void _resetGeneration() {
+  void _resetGeneration({bool resetChecks = false}) {
     _resumeIndex = null;
     _generatedPaths.clear();
+    if (resetChecks) {
+      _checkedUnitIndices
+        ..clear()
+        ..addAll(List.generate(_units.length, (index) => index));
+    }
   }
 
   Future<void> _selectOutputDirectory() async {
@@ -298,8 +310,13 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       final unit = units[(_selectedIndex ?? 0).clamp(0, units.length - 1)];
       final provider = await _provider();
-      final bytes =
-          await provider.synthesize(previewText(unit.text), voice.name);
+      final bytes = await provider.synthesize(
+        previewText(unit.text),
+        voice.name,
+        rate: 1 + _ratePercent / 100,
+        volume: _volumePercent,
+        pitch: _pitchHz,
+      );
       final file =
           await AudioGenerator.writeTemporary(bytes, 'tts-preview.mp3');
       await _player.setFilePath(file);
@@ -314,6 +331,15 @@ class _HomeScreenState extends State<HomeScreen> {
       if (units.isEmpty) {
         throw FormatException(s.get('invalidChars'));
       }
+      final selectedIndices = _checkedUnitIndices
+          .where((index) => index >= 0 && index < units.length)
+          .toList()
+        ..sort();
+      final selectedUnits =
+          selectedIndices.map((index) => units[index]).toList();
+      if (selectedUnits.isEmpty) {
+        throw FormatException(s.get('noUnitsChecked'));
+      }
       final voice = _voice;
       if (voice == null) {
         throw TtsProviderException(s.get('voiceRequired'));
@@ -326,7 +352,7 @@ class _HomeScreenState extends State<HomeScreen> {
           throw TtsProviderException(s.get('outputNotWritable'));
         }
       }
-      final startIndex = resume ? (_resumeIndex ?? 0) : 0;
+      const startIndex = 0;
       if (!resume) {
         _generatedPaths.clear();
         _resumeIndex = 0;
@@ -334,7 +360,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final provider = await _provider();
       final paths = await AudioGenerator.generateAll(
         provider,
-        units,
+        selectedUnits,
         voice.name,
         outputDirectory: outputDirectory == null ||
                 OutputDirectoryService.isAndroidDocumentTree(outputDirectory)
@@ -350,6 +376,9 @@ class _HomeScreenState extends State<HomeScreen> {
             : null,
         startIndex: startIndex,
         existingPaths: _generatedPaths,
+        rate: 1 + _ratePercent / 100,
+        volume: _volumePercent,
+        pitch: _pitchHz,
         onProgress: (current, total) {
           if (mounted) setState(() => _status = '$current / $total');
         },
@@ -357,7 +386,8 @@ class _HomeScreenState extends State<HomeScreen> {
           if (!mounted) return;
           setState(() {
             if (!_generatedPaths.contains(path)) _generatedPaths.add(path);
-            _resumeIndex = current < total ? current : null;
+            _checkedUnitIndices.remove(selectedIndices[current - 1]);
+            _resumeIndex = current < total ? 0 : null;
           });
         },
       );
@@ -411,6 +441,9 @@ class _HomeScreenState extends State<HomeScreen> {
       await prefs.setBool('split_by_chars', _splitByChars);
       await prefs.setInt(
           'max_chars', int.tryParse(_charsController.text) ?? 5000);
+      await prefs.setDouble('rate_percent', _ratePercent);
+      await prefs.setDouble('volume_percent', _volumePercent);
+      await prefs.setDouble('pitch_hz', _pitchHz);
     } catch (error) {
       _showError(error);
     } finally {
@@ -578,7 +611,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ? null
                 : (values) => setState(() {
                       _splitByChars = values.first;
-                      _resetGeneration();
+                      _resetGeneration(resetChecks: true);
                     }),
           ),
           if (_splitByChars)
@@ -587,7 +620,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 enabled: !_busy,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(labelText: s.get('maxChars')),
-                onChanged: (_) => setState(_resetGeneration)),
+                onChanged: (_) =>
+                    setState(() => _resetGeneration(resetChecks: true))),
           const SizedBox(height: 8),
           OutlinedButton(
               onPressed: _busy ? null : _loadVoices,
@@ -630,21 +664,90 @@ class _HomeScreenState extends State<HomeScreen> {
               onChanged: (value) => setState(() => _voice = value),
             ),
           ],
+          const SizedBox(height: 12),
+          Text(s.get('audioAdjustments'),
+              style: Theme.of(context).textTheme.titleMedium),
+          _AudioSlider(
+            label: s.get('rate'),
+            value: _ratePercent,
+            suffix: '%',
+            enabled: !_busy,
+            onChanged: (value) => setState(() {
+              _ratePercent = value;
+              _resetGeneration();
+            }),
+          ),
+          _AudioSlider(
+            label: s.get('volume'),
+            value: _volumePercent,
+            suffix: '%',
+            enabled: !_busy,
+            onChanged: (value) => setState(() {
+              _volumePercent = value;
+              _resetGeneration();
+            }),
+          ),
+          _AudioSlider(
+            label: s.get('pitch'),
+            value: _pitchHz,
+            suffix: ' Hz',
+            enabled: !_busy,
+            onChanged: (value) => setState(() {
+              _pitchHz = value;
+              _resetGeneration();
+            }),
+          ),
           if (units.isNotEmpty) ...[
             const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(s.get('outputUnits'),
+                      style: Theme.of(context).textTheme.titleMedium),
+                ),
+                TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () => setState(() {
+                            _resetGeneration();
+                            _checkedUnitIndices.addAll(
+                                List.generate(units.length, (index) => index));
+                          }),
+                  child: Text(s.get('selectAll')),
+                ),
+                TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () => setState(() {
+                            _resetGeneration();
+                            _checkedUnitIndices.clear();
+                          }),
+                  child: Text(s.get('deselectAll')),
+                ),
+              ],
+            ),
             SizedBox(
               height: 180,
               child: ListView.builder(
                 itemCount: units.length,
                 itemBuilder: (context, index) => ListTile(
                   selected: _selectedIndex == index,
-                  leading: Icon(
-                    _selectedIndex == index
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_unchecked,
+                  leading: Checkbox(
+                    value: _checkedUnitIndices.contains(index),
+                    onChanged: _busy
+                        ? null
+                        : (checked) => setState(() {
+                              _resetGeneration();
+                              if (checked == true) {
+                                _checkedUnitIndices.add(index);
+                              } else {
+                                _checkedUnitIndices.remove(index);
+                              }
+                            }),
                   ),
                   title: Text(units[index].title),
-                  subtitle: Text('${units[index].text.length} chars'),
+                  subtitle: Text(
+                      '${units[index].text.length} ${s.get('characters')}'),
                   onTap: () => setState(() => _selectedIndex = index),
                 ),
               ),
@@ -700,4 +803,43 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
+
+class _AudioSlider extends StatelessWidget {
+  const _AudioSlider({
+    required this.label,
+    required this.value,
+    required this.suffix,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final String label;
+  final double value;
+  final String suffix;
+  final bool enabled;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          SizedBox(width: 64, child: Text(label)),
+          Expanded(
+            child: Slider(
+              value: value,
+              min: -50,
+              max: 50,
+              divisions: 100,
+              onChanged: enabled ? onChanged : null,
+            ),
+          ),
+          SizedBox(
+            width: 58,
+            child: Text(
+              '${value >= 0 ? '+' : ''}${value.round()}$suffix',
+              textAlign: TextAlign.end,
+            ),
+          ),
+        ],
+      );
 }

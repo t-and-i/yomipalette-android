@@ -14,14 +14,22 @@ class AudioGenerator {
   static Future<Uint8List> synthesizeLong(
     TtsProvider provider,
     String text,
-    String voice,
-  ) async {
+    String voice, {
+    double rate = 1,
+    double volume = 0,
+    double pitch = 0,
+  }) async {
     final builder = BytesBuilder(copy: false);
     var offset = 0;
     while (offset < text.length) {
       final end = math.min(offset + providerChunkSize, text.length);
-      builder
-          .add(await provider.synthesize(text.substring(offset, end), voice));
+      builder.add(await provider.synthesize(
+        text.substring(offset, end),
+        voice,
+        rate: rate,
+        volume: volume,
+        pitch: pitch,
+      ));
       offset = end;
     }
     return builder.takeBytes();
@@ -42,6 +50,9 @@ class AudioGenerator {
     Future<String> Function(String filename, Uint8List bytes)? fileWriter,
     int startIndex = 0,
     List<String> existingPaths = const [],
+    double rate = 1,
+    double volume = 0,
+    double pitch = 0,
     void Function(int current, int total)? onProgress,
     void Function(String path, int current, int total)? onFileGenerated,
   }) async {
@@ -60,7 +71,14 @@ class AudioGenerator {
     final paths = List<String>.from(existingPaths);
     for (var index = startIndex; index < units.length; index++) {
       final unit = units[index];
-      final bytes = await synthesizeLong(provider, unit.text, voice);
+      final bytes = await synthesizeLong(
+        provider,
+        unit.text,
+        voice,
+        rate: rate,
+        volume: volume,
+        pitch: pitch,
+      );
       final safeTitle =
           unit.title.replaceAll(RegExp(r'[\\/:*?"<>|\r\n\t]'), '_');
       final filename =
