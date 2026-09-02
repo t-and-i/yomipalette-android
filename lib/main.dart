@@ -1,8 +1,9 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,12 +18,15 @@ import 'services/audio_generator.dart';
 import 'services/credential_store.dart';
 import 'services/document_reader.dart';
 import 'services/output_directory_service.dart';
+import 'services/preview_audio_player.dart';
 import 'services/text_splitter.dart';
 
 void main() => runApp(const TtsMobileApp());
 
 class TtsMobileApp extends StatefulWidget {
-  const TtsMobileApp({super.key});
+  const TtsMobileApp({this.previewPlayer, super.key});
+
+  final PreviewAudioPlayer? previewPlayer;
 
   @override
   State<TtsMobileApp> createState() => _TtsMobileAppState();
@@ -44,13 +48,20 @@ class _TtsMobileAppState extends State<TtsMobileApp> {
         title: 'TTS Text to MP3',
         theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
         home: HomeScreen(
-            onLocaleChanged: (value) => setState(() => locale = value)),
+          onLocaleChanged: (value) => setState(() => locale = value),
+          previewPlayer: widget.previewPlayer,
+        ),
       );
 }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({required this.onLocaleChanged, super.key});
+  const HomeScreen({
+    required this.onLocaleChanged,
+    this.previewPlayer,
+    super.key,
+  });
   final ValueChanged<Locale> onLocaleChanged;
+  final PreviewAudioPlayer? previewPlayer;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -61,13 +72,15 @@ class _HomeScreenState extends State<HomeScreen> {
   final _keyController = TextEditingController();
   final _regionController = TextEditingController();
   final _charsController = TextEditingController(text: '5000');
-  final _player = AudioPlayer();
+  late final PreviewAudioPlayer _player;
+  StreamSubscription<bool>? _playerSubscription;
 
   String _providerName = 'azure';
   String _textEncoding = 'auto';
   bool _persist = true;
   bool _splitByChars = false;
   bool _busy = false;
+  bool _isPreviewPlaying = false;
   bool _showLimitations = true;
   double _ratePercent = 0;
   double _volumePercent = 0;
@@ -91,6 +104,11 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _player = widget.previewPlayer ?? JustAudioPreviewPlayer();
+    _playerSubscription = _player.playingStream.listen(
+      _onPreviewPlayingChanged,
+      onError: (_) => _onPreviewPlayingChanged(false),
+    );
     _restore();
   }
 
@@ -100,8 +118,22 @@ class _HomeScreenState extends State<HomeScreen> {
     _keyController.dispose();
     _regionController.dispose();
     _charsController.dispose();
-    _player.dispose();
+    unawaited(_disposePlayer());
     super.dispose();
+  }
+
+  Future<void> _disposePlayer() async {
+    await _playerSubscription?.cancel();
+    await _player.stop();
+    await _player.dispose();
+  }
+
+  void _onPreviewPlayingChanged(bool playing) {
+    if (!mounted || _isPreviewPlaying == playing) return;
+    setState(() {
+      _isPreviewPlaying = playing;
+      if (playing) _status = s.get('previewPlaying');
+    });
   }
 
   AppStrings get s => AppStrings(Localizations.localeOf(context));
@@ -363,6 +395,21 @@ class _HomeScreenState extends State<HomeScreen> {
       await _player.setFilePath(file);
       await _player.play();
     });
+  }
+
+  Future<void> _stopPreview() async {
+    try {
+      await _player.stop();
+      await _player.seekToStart();
+      if (!mounted) return;
+      setState(() {
+        _isPreviewPlaying = false;
+        _status = s.get('previewStopped');
+      });
+    } catch (error) {
+      if (mounted) setState(() => _isPreviewPlaying = false);
+      _showError(error);
+    }
   }
 
   Future<void> _generate({bool resume = false}) async {
@@ -874,13 +921,16 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Row(children: [
           Expanded(
               child: OutlinedButton.icon(
-                  onPressed: _busy ? null : _preview,
-                  icon: const Icon(Icons.play_arrow),
-                  label: Text(s.get('preview')))),
+                  onPressed: _isPreviewPlaying
+                      ? _stopPreview
+                      : (_busy ? null : _preview),
+                  icon: Icon(_isPreviewPlaying ? Icons.stop : Icons.play_arrow),
+                  label: Text(
+                      s.get(_isPreviewPlaying ? 'stopPreview' : 'preview')))),
           const SizedBox(width: 8),
           Expanded(
               child: FilledButton.icon(
-                  onPressed: _busy
+                  onPressed: _busy || _isPreviewPlaying
                       ? null
                       : () => _generate(resume: _resumeIndex != null),
                   icon: const Icon(Icons.download),
