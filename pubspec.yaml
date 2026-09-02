@@ -1,7 +1,7 @@
 name: tts_text_mp3_mobile
 description: Android and iOS client for TTS Text to MP3.
 publish_to: none
-version: 0.1.5+5
+version: 0.1.6+6
 
 environment:
   sdk: ">=3.5.0 <4.0.0"

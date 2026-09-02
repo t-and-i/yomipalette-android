@@ -24,9 +24,14 @@ import 'services/text_splitter.dart';
 void main() => runApp(const TtsMobileApp());
 
 class TtsMobileApp extends StatefulWidget {
-  const TtsMobileApp({this.previewPlayer, super.key});
+  const TtsMobileApp({
+    this.previewPlayer,
+    this.initialChapters = const [],
+    super.key,
+  });
 
   final PreviewAudioPlayer? previewPlayer;
+  final List<Chapter> initialChapters;
 
   @override
   State<TtsMobileApp> createState() => _TtsMobileAppState();
@@ -50,6 +55,7 @@ class _TtsMobileAppState extends State<TtsMobileApp> {
         home: HomeScreen(
           onLocaleChanged: (value) => setState(() => locale = value),
           previewPlayer: widget.previewPlayer,
+          initialChapters: widget.initialChapters,
         ),
       );
 }
@@ -58,10 +64,12 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({
     required this.onLocaleChanged,
     this.previewPlayer,
+    this.initialChapters = const [],
     super.key,
   });
   final ValueChanged<Locale> onLocaleChanged;
   final PreviewAudioPlayer? previewPlayer;
+  final List<Chapter> initialChapters;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -108,6 +116,10 @@ class _HomeScreenState extends State<HomeScreen> {
     _playerSubscription = _player.playingStream.listen(
       _onPreviewPlayingChanged,
       onError: (_) => _onPreviewPlayingChanged(false),
+    );
+    _chapters = widget.initialChapters;
+    _checkedUnitIndices.addAll(
+      List.generate(_units.length, (index) => index),
     );
     _restore();
   }
@@ -630,7 +642,8 @@ class _HomeScreenState extends State<HomeScreen> {
             initialValue: _providerName,
             decoration: InputDecoration(labelText: s.get('provider')),
             items: [
-              const DropdownMenuItem(value: 'edge', child: Text('Edge TTS')),
+              DropdownMenuItem(
+                  value: 'edge', child: Text(s.get('providerEdge'))),
               if (defaultTargetPlatform == TargetPlatform.android)
                 DropdownMenuItem(
                     value: 'device', child: Text(s.get('deviceTts'))),
@@ -761,44 +774,46 @@ class _HomeScreenState extends State<HomeScreen> {
           OutlinedButton(
               onPressed: _busy ? null : _loadVoices,
               child: Text(s.get('loadVoices'))),
+          DropdownButtonFormField<String>(
+            key: ValueKey('voice-locale-$_voiceLocale'),
+            initialValue: _voiceLocale,
+            isExpanded: true,
+            decoration: InputDecoration(labelText: s.get('voiceLanguage')),
+            items: _voiceLocales
+                .map((locale) =>
+                    DropdownMenuItem(value: locale, child: Text(locale)))
+                .toList(),
+            onChanged: _busy || _voices.isEmpty
+                ? null
+                : (locale) {
+                    if (locale == null) return;
+                    setState(() {
+                      _voiceLocale = locale;
+                      _voice = _voices.firstWhere(
+                        (voice) => voice.locale == locale,
+                      );
+                    });
+                  },
+          ),
+          DropdownButtonFormField<VoiceInfo>(
+            key: ValueKey(_voice),
+            initialValue: _voice,
+            isExpanded: true,
+            decoration: InputDecoration(labelText: s.get('voice')),
+            items: _filteredVoices
+                .map((voice) => DropdownMenuItem(
+                    value: voice,
+                    child: Text(voice.name, overflow: TextOverflow.ellipsis)))
+                .toList(),
+            onChanged: _busy || _voices.isEmpty
+                ? null
+                : (value) => setState(() => _voice = value),
+          ),
           if (_voices.isEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(s.get('voiceNotLoaded')),
-            )
-          else ...[
-            DropdownButtonFormField<String>(
-              key: ValueKey('voice-locale-$_voiceLocale'),
-              initialValue: _voiceLocale,
-              isExpanded: true,
-              decoration: InputDecoration(labelText: s.get('voiceLanguage')),
-              items: _voiceLocales
-                  .map((locale) =>
-                      DropdownMenuItem(value: locale, child: Text(locale)))
-                  .toList(),
-              onChanged: (locale) {
-                if (locale == null) return;
-                setState(() {
-                  _voiceLocale = locale;
-                  _voice = _voices.firstWhere(
-                    (voice) => voice.locale == locale,
-                  );
-                });
-              },
             ),
-            DropdownButtonFormField<VoiceInfo>(
-              key: ValueKey(_voice),
-              initialValue: _voice,
-              isExpanded: true,
-              decoration: InputDecoration(labelText: s.get('voice')),
-              items: _filteredVoices
-                  .map((voice) => DropdownMenuItem(
-                      value: voice,
-                      child: Text(voice.name, overflow: TextOverflow.ellipsis)))
-                  .toList(),
-              onChanged: (value) => setState(() => _voice = value),
-            ),
-          ],
           const SizedBox(height: 12),
           Text(s.get('audioAdjustments'),
               style: Theme.of(context).textTheme.titleMedium),
@@ -832,62 +847,65 @@ class _HomeScreenState extends State<HomeScreen> {
               _resetGeneration();
             }),
           ),
-          if (units.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(s.get('outputUnits'),
-                      style: Theme.of(context).textTheme.titleMedium),
-                ),
-                TextButton(
-                  onPressed: _busy
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Text(s.get('outputUnits'),
+                    style: Theme.of(context).textTheme.titleMedium),
+              ),
+              TextButton(
+                onPressed: _busy || units.isEmpty
+                    ? null
+                    : () => setState(() {
+                          _resetGeneration();
+                          _checkedUnitIndices.addAll(
+                              List.generate(units.length, (index) => index));
+                        }),
+                child: Text(s.get('selectAll')),
+              ),
+              TextButton(
+                onPressed: _busy || units.isEmpty
+                    ? null
+                    : () => setState(() {
+                          _resetGeneration();
+                          _checkedUnitIndices.clear();
+                        }),
+                child: Text(s.get('deselectAll')),
+              ),
+            ],
+          ),
+          if (units.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(s.get('outputUnitsEmpty')),
+            )
+          else
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: units.length,
+              itemBuilder: (context, index) => ListTile(
+                selected: _selectedIndex == index,
+                leading: Checkbox(
+                  value: _checkedUnitIndices.contains(index),
+                  onChanged: _busy
                       ? null
-                      : () => setState(() {
+                      : (checked) => setState(() {
                             _resetGeneration();
-                            _checkedUnitIndices.addAll(
-                                List.generate(units.length, (index) => index));
+                            if (checked == true) {
+                              _checkedUnitIndices.add(index);
+                            } else {
+                              _checkedUnitIndices.remove(index);
+                            }
                           }),
-                  child: Text(s.get('selectAll')),
                 ),
-                TextButton(
-                  onPressed: _busy
-                      ? null
-                      : () => setState(() {
-                            _resetGeneration();
-                            _checkedUnitIndices.clear();
-                          }),
-                  child: Text(s.get('deselectAll')),
-                ),
-              ],
-            ),
-            SizedBox(
-              height: 180,
-              child: ListView.builder(
-                itemCount: units.length,
-                itemBuilder: (context, index) => ListTile(
-                  selected: _selectedIndex == index,
-                  leading: Checkbox(
-                    value: _checkedUnitIndices.contains(index),
-                    onChanged: _busy
-                        ? null
-                        : (checked) => setState(() {
-                              _resetGeneration();
-                              if (checked == true) {
-                                _checkedUnitIndices.add(index);
-                              } else {
-                                _checkedUnitIndices.remove(index);
-                              }
-                            }),
-                  ),
-                  title: Text(units[index].title),
-                  subtitle: Text(
-                      '${units[index].text.length} ${s.get('characters')}'),
-                  onTap: () => setState(() => _selectedIndex = index),
-                ),
+                title: Text(units[index].title),
+                subtitle:
+                    Text('${units[index].text.length} ${s.get('characters')}'),
+                onTap: () => setState(() => _selectedIndex = index),
               ),
             ),
-          ],
           if (_busy)
             const Padding(
                 padding: EdgeInsets.only(top: 12),

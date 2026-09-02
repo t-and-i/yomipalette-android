@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tts_text_mp3_mobile/l10n/strings.dart';
 import 'package:tts_text_mp3_mobile/main.dart';
+import 'package:tts_text_mp3_mobile/models/chapter.dart';
 import 'package:tts_text_mp3_mobile/services/preview_audio_player.dart';
 
 class _FakePreviewAudioPlayer implements PreviewAudioPlayer {
@@ -69,7 +70,7 @@ void main() {
 
     await tester.tap(find.text('Azure Speech').first);
     await tester.pumpAndSettle();
-    expect(find.text('Edge TTS'), findsOneWidget);
+    expect(find.text('Edge TTS (Free)'), findsOneWidget);
   });
 
   testWidgets('voice guidance is shown and limitations can be hidden',
@@ -86,6 +87,8 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('Load voices to select a voice.'), findsOneWidget);
+    expect(find.text('Voice language'), findsOneWidget);
+    expect(find.text('Voice'), findsOneWidget);
     expect(
       AppStrings(const Locale('ja')).get('voiceRequired'),
       '先に音声一覧を取得し、Voiceを選択してください。',
@@ -108,6 +111,76 @@ void main() {
     expect(find.text('Not supported on mobile'), findsNothing);
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool('show_mobile_limitations'), isFalse);
+  });
+
+  testWidgets('output units are always visible and selectable', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+
+    await tester.pumpWidget(const TtsMobileApp(initialChapters: [
+      Chapter(index: 1, title: 'Chapter A', text: 'First chapter.'),
+      Chapter(index: 2, title: 'Chapter B', text: 'Second chapter.'),
+    ]));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Chapter A'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Output units'), findsOneWidget);
+    expect(find.text('Chapter A'), findsOneWidget);
+    expect(find.text('Chapter B'), findsOneWidget);
+    expect(
+      tester
+          .widgetList<Checkbox>(find.byType(Checkbox))
+          .map((box) => box.value),
+      everyElement(isTrue),
+    );
+
+    await tester.tap(find.text('Uncheck all'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widgetList<Checkbox>(find.byType(Checkbox))
+          .map((box) => box.value),
+      everyElement(isFalse),
+    );
+
+    await tester.tap(find.text('Check all'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widgetList<Checkbox>(find.byType(Checkbox))
+          .map((box) => box.value),
+      everyElement(isTrue),
+    );
+  });
+
+  testWidgets('empty output units show guidance', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+
+    await tester.pumpWidget(const TtsMobileApp());
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Choose a TXT or EPUB file to display output units.'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    expect(find.text('Output units'), findsOneWidget);
+    expect(
+      find.text('Choose a TXT or EPUB file to display output units.'),
+      findsOneWidget,
+    );
+  });
+
+  test('Edge provider labels are localized', () {
+    expect(
+        AppStrings(const Locale('en')).get('providerEdge'), 'Edge TTS (Free)');
+    expect(AppStrings(const Locale('ja')).get('providerEdge'), 'Edge TTS (無料)');
+    expect(AppStrings(const Locale('zh')).get('providerEdge'), 'Edge TTS（免费）');
   });
 
   testWidgets('Android shows installed device TTS engines and voices',
