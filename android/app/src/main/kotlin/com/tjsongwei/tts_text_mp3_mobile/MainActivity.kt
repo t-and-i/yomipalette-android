@@ -4,16 +4,23 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
+import android.os.Bundle
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
 import java.io.IOException
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : FlutterActivity() {
     private val channelName = "tts_text_mp3/output_directory"
+    private val deviceTtsChannelName = "tts_text_mp3/device_tts"
     private val selectDirectoryRequest = 42081
     private var pendingDirectoryResult: MethodChannel.Result? = null
 
@@ -21,6 +28,133 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler(::handleOutputDirectoryCall)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, deviceTtsChannelName)
+            .setMethodCallHandler(::handleDeviceTtsCall)
+    }
+
+    private fun handleDeviceTtsCall(call: MethodCall, result: MethodChannel.Result) {
+        when (call.method) {
+            "listEngines" -> {
+                val probe = TextToSpeech(this, null)
+                try {
+                    val defaultEngine = probe.defaultEngine
+                    result.success(probe.engines.map {
+                        mapOf(
+                            "name" to it.name,
+                            "label" to it.label,
+                            "isDefault" to (it.name == defaultEngine)
+                        )
+                    })
+                } finally {
+                    probe.shutdown()
+                }
+            }
+            "listVoices" -> {
+                val engine = call.argument<String>("engine")
+                if (engine.isNullOrBlank()) {
+                    result.error("missing_engine", "Select a TTS engine.", null)
+                    return
+                }
+                withTts(engine, result) { tts ->
+                    val voices = tts.voices.orEmpty()
+                        .sortedWith(compareBy({ it.locale.toLanguageTag() }, { it.name }))
+                        .map {
+                            mapOf(
+                                "name" to it.name,
+                                "locale" to it.locale.toLanguageTag(),
+                                "networkRequired" to it.isNetworkConnectionRequired
+                            )
+                        }
+                    result.success(voices)
+                    tts.shutdown()
+                }
+            }
+            "synthesize" -> synthesizeDeviceTts(call, result)
+            else -> result.notImplemented()
+        }
+    }
+
+    private fun synthesizeDeviceTts(call: MethodCall, result: MethodChannel.Result) {
+        val engine = call.argument<String>("engine")
+        val voiceName = call.argument<String>("voice")
+        val text = call.argument<String>("text")
+        if (engine.isNullOrBlank() || voiceName.isNullOrBlank() || text.isNullOrEmpty()) {
+            result.error("invalid_request", "Engine, voice, and text are required.", null)
+            return
+        }
+        withTts(engine, result) { tts ->
+            val voice = tts.voices?.firstOrNull { it.name == voiceName }
+            if (voice == null) {
+                tts.shutdown()
+                result.error("voice_unavailable", "The selected device voice is unavailable.", null)
+                return@withTts
+            }
+            tts.voice = voice
+            tts.setSpeechRate((call.argument<Double>("rate") ?: 1.0).toFloat())
+            tts.setPitch((call.argument<Double>("pitch") ?: 1.0).toFloat())
+            val output = File.createTempFile("device-tts-", ".wav", cacheDir)
+            val utteranceId = UUID.randomUUID().toString()
+            val finished = AtomicBoolean(false)
+            tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(id: String?) = Unit
+
+                override fun onDone(id: String?) {
+                    if (!finished.compareAndSet(false, true)) return
+                    try {
+                        result.success(output.readBytes())
+                    } catch (error: Exception) {
+                        result.error("read_failed", error.message, null)
+                    } finally {
+                        output.delete()
+                        tts.shutdown()
+                    }
+                }
+
+                @Deprecated("Deprecated in Android")
+                override fun onError(id: String?) {
+                    finishWithError("Device TTS synthesis failed.")
+                }
+
+                override fun onError(id: String?, errorCode: Int) {
+                    finishWithError("Device TTS synthesis failed ($errorCode).")
+                }
+
+                private fun finishWithError(message: String) {
+                    if (!finished.compareAndSet(false, true)) return
+                    output.delete()
+                    tts.shutdown()
+                    result.error("synthesis_failed", message, null)
+                }
+            })
+            val params = Bundle().apply {
+                putFloat(
+                    TextToSpeech.Engine.KEY_PARAM_VOLUME,
+                    (call.argument<Double>("volume") ?: 1.0).toFloat()
+                )
+            }
+            val queued = tts.synthesizeToFile(text, params, output, utteranceId)
+            if (queued != TextToSpeech.SUCCESS && finished.compareAndSet(false, true)) {
+                output.delete()
+                tts.shutdown()
+                result.error("queue_failed", "The device TTS request could not be queued.", null)
+            }
+        }
+    }
+
+    private fun withTts(
+        engine: String,
+        result: MethodChannel.Result,
+        ready: (TextToSpeech) -> Unit
+    ) {
+        lateinit var tts: TextToSpeech
+        tts = TextToSpeech(this, { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                ready(tts)
+            } else {
+                tts.shutdown()
+                result.error("initialization_failed", "The selected TTS engine could not be initialized.", null)
+            }
+        }, engine)
     }
 
     private fun handleOutputDirectoryCall(call: MethodCall, result: MethodChannel.Result) {

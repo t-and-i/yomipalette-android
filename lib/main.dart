@@ -1,6 +1,5 @@
-import 'dart:typed_data';
-
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:just_audio/just_audio.dart';
@@ -10,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'l10n/strings.dart';
 import 'models/chapter.dart';
 import 'providers/azure_provider.dart';
+import 'providers/device_tts_provider.dart';
 import 'providers/edge_provider.dart';
 import 'providers/google_provider.dart';
 import 'providers/tts_provider.dart';
@@ -78,6 +78,8 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _outputDirectoryLabel;
   List<Chapter> _chapters = const [];
   List<VoiceInfo> _voices = const [];
+  List<DeviceTtsEngine> _deviceTtsEngines = const [];
+  String? _deviceTtsEngine;
   String? _voiceLocale;
   VoiceInfo? _voice;
   int? _selectedIndex;
@@ -111,7 +113,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final region = await _credentials.read(provider, 'region') ?? '';
     if (!mounted) return;
     setState(() {
-      _providerName = provider;
+      _providerName = provider == 'device' &&
+              defaultTargetPlatform != TargetPlatform.android
+          ? 'edge'
+          : provider;
       _textEncoding = prefs.getString('text_encoding') ?? 'auto';
       if (!DocumentReader.textEncodings.contains(_textEncoding)) {
         _textEncoding = 'auto';
@@ -126,8 +131,11 @@ class _HomeScreenState extends State<HomeScreen> {
       _pitchHz = prefs.getDouble('pitch_hz') ?? 0;
       _outputDirectory = prefs.getString('output_directory');
       _outputDirectoryLabel = prefs.getString('output_directory_label');
+      _deviceTtsEngine = prefs.getString('device_tts_engine');
     });
-    if (provider == 'edge' ||
+    if (_providerName == 'device') {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadDeviceEngines());
+    } else if (_providerName == 'edge' ||
         (key.isNotEmpty && (provider != 'azure' || region.isNotEmpty))) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadVoices());
     }
@@ -242,6 +250,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<TtsProvider> _provider() async {
     if (_providerName == 'edge') return EdgeProvider();
+    if (_providerName == 'device') {
+      final engine = _deviceTtsEngine;
+      if (engine == null) {
+        throw TtsProviderException(s.get('deviceEngineRequired'));
+      }
+      return DeviceTtsProvider(engine);
+    }
     final key = _keyController.text.trim();
     if (key.isEmpty) throw const TtsProviderException('API key is required.');
     await _credentials.write(
@@ -296,6 +311,32 @@ class _HomeScreenState extends State<HomeScreen> {
           _status = '${voices.length} voices';
         });
       });
+
+  Future<void> _loadDeviceEngines() async {
+    await _run(() async {
+      final engines = await DeviceTtsProvider.listEngines();
+      if (engines.isEmpty) {
+        throw TtsProviderException(s.get('deviceEngineMissing'));
+      }
+      final saved = _deviceTtsEngine;
+      final selected = engines.any((engine) => engine.name == saved)
+          ? saved
+          : engines
+              .firstWhere(
+                (engine) => engine.isDefault,
+                orElse: () => engines.first,
+              )
+              .name;
+      if (!mounted) return;
+      setState(() {
+        _deviceTtsEngines = engines;
+        _deviceTtsEngine = selected;
+      });
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('device_tts_engine', selected!);
+    });
+    if (_deviceTtsEngine != null) await _loadVoices();
+  }
 
   Future<void> _preview() async {
     if (_chapters.isEmpty) return _showError(s.get('noFile'));
@@ -495,6 +536,7 @@ class _HomeScreenState extends State<HomeScreen> {
           DropdownButtonFormField<String>(
             key: ValueKey('text-encoding-$_textEncoding'),
             initialValue: _textEncoding,
+            isExpanded: true,
             decoration: InputDecoration(labelText: s.get('textEncoding')),
             items: DocumentReader.textEncodings
                 .map((encoding) => DropdownMenuItem(
@@ -540,10 +582,14 @@ class _HomeScreenState extends State<HomeScreen> {
           DropdownButtonFormField<String>(
             initialValue: _providerName,
             decoration: InputDecoration(labelText: s.get('provider')),
-            items: const [
-              DropdownMenuItem(value: 'edge', child: Text('Edge TTS')),
-              DropdownMenuItem(value: 'azure', child: Text('Azure Speech')),
-              DropdownMenuItem(
+            items: [
+              const DropdownMenuItem(value: 'edge', child: Text('Edge TTS')),
+              if (defaultTargetPlatform == TargetPlatform.android)
+                DropdownMenuItem(
+                    value: 'device', child: Text(s.get('deviceTts'))),
+              const DropdownMenuItem(
+                  value: 'azure', child: Text('Azure Speech')),
+              const DropdownMenuItem(
                   value: 'google', child: Text('Google Cloud TTS')),
             ],
             onChanged: _busy
@@ -562,7 +608,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       _voiceLocale = null;
                       _voice = null;
                     });
-                    if (provider == 'edge' ||
+                    if (provider == 'device') {
+                      await _loadDeviceEngines();
+                    } else if (provider == 'edge' ||
                         (key.isNotEmpty &&
                             (provider != 'azure' || region.isNotEmpty))) {
                       await _loadVoices();
@@ -570,7 +618,47 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
           ),
           const SizedBox(height: 8),
-          if (_providerName != 'edge')
+          if (_providerName == 'device') ...[
+            DropdownButtonFormField<String>(
+              key: ValueKey('device-engine-$_deviceTtsEngine'),
+              initialValue: _deviceTtsEngine,
+              isExpanded: true,
+              decoration: InputDecoration(labelText: s.get('deviceTtsEngine')),
+              items: _deviceTtsEngines
+                  .map((engine) => DropdownMenuItem(
+                        value: engine.name,
+                        child: Text(
+                          engine.isDefault
+                              ? '${engine.label} (${s.get('defaultEngine')})'
+                              : engine.label,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ))
+                  .toList(),
+              onChanged: _busy
+                  ? null
+                  : (engine) async {
+                      if (engine == null) return;
+                      setState(() {
+                        _deviceTtsEngine = engine;
+                        _voices = const [];
+                        _voiceLocale = null;
+                        _voice = null;
+                      });
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setString('device_tts_engine', engine);
+                      await _loadVoices();
+                    },
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                s.get('deviceTtsNote'),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          ],
+          if (_providerName == 'azure' || _providerName == 'google')
             TextField(
                 controller: _keyController,
                 obscureText: true,
@@ -582,7 +670,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 controller: _regionController,
                 autocorrect: false,
                 decoration: InputDecoration(labelText: s.get('region'))),
-          if (_providerName != 'edge') ...[
+          if (_providerName == 'azure' || _providerName == 'google') ...[
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               value: _persist,
