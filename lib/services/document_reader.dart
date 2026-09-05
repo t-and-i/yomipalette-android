@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:charset_converter/charset_converter.dart';
-import 'package:epubx/epubx.dart';
+import 'epub_reader.dart';
 
 import '../models/chapter.dart';
 
@@ -28,7 +28,7 @@ class DocumentReader {
     if (lower.endsWith('.txt')) {
       return _readText(name, bytes, textEncoding);
     }
-    if (lower.endsWith('.epub')) return _readEpub(bytes);
+    if (lower.endsWith('.epub')) return readEpubSections(bytes);
     throw const FormatException('Only TXT and EPUB files are supported.');
   }
 
@@ -219,43 +219,6 @@ class DocumentReader {
     }
     return true;
   }
-
-  static Future<List<Chapter>> _readEpub(Uint8List bytes) async {
-    final book = await EpubReader.readBook(bytes);
-    final result = <Chapter>[];
-    void visit(List<EpubChapter>? chapters) {
-      for (final chapter in chapters ?? const <EpubChapter>[]) {
-        final text = _clean(_stripHtml(chapter.HtmlContent ?? ''));
-        if (text.isNotEmpty) {
-          final index = result.length + 1;
-          result.add(Chapter(
-            index: index,
-            title: (chapter.Title?.trim().isNotEmpty ?? false)
-                ? chapter.Title!.trim()
-                : 'Chapter $index',
-            text: text,
-          ));
-        }
-        visit(chapter.SubChapters);
-      }
-    }
-
-    visit(book.Chapters);
-    if (result.isEmpty) throw const FormatException('No readable text found.');
-    return result;
-  }
-
-  static String _stripHtml(String html) => html
-      .replaceAll(RegExp(r'<(script|style)[^>]*>.*?</\1>', dotAll: true), '')
-      .replaceAll(
-          RegExp(r'<br\s*/?>|</p>|</div>|</h[1-6]>', caseSensitive: false),
-          '\n')
-      .replaceAll(RegExp(r'<[^>]+>'), '')
-      .replaceAll('&nbsp;', ' ')
-      .replaceAll('&amp;', '&')
-      .replaceAll('&lt;', '<')
-      .replaceAll('&gt;', '>')
-      .replaceAll('&quot;', '"');
 
   static String _clean(String text) => text
       .replaceAll('\r\n', '\n')

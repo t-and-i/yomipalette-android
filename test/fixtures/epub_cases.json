@@ -1,0 +1,831 @@
+[
+  {
+    "name": "chapter_doors_epub2",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/front.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Notice</p></body></html>",
+      "OPS/one.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h1>Door one</h1></body></html>",
+      "OPS/one-body.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Alpha.</p></body></html>",
+      "OPS/two.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h1>Door two</h1></body></html>",
+      "OPS/two-body.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Beta.</p></body></html>",
+      "OPS/notes.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h1>補註</h1><p>Notes.</p></body></html>",
+      "OPS/author.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Writer bio.</p></body></html>",
+      "OPS/toc.ncx": "<ncx xmlns=\"http://www.daisy.org/z3986/2005/ncx/\"><navMap><navPoint><navLabel><text>Chapter one</text></navLabel><content src=\"one.xhtml\"/></navPoint><navPoint><navLabel><text>Chapter two</text></navLabel><content src=\"two.xhtml\"/></navPoint></navMap></ncx>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"2.0\"><metadata/><manifest><item id=\"d0\" href=\"front.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"one.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d2\" href=\"one-body.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d3\" href=\"two.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d4\" href=\"two-body.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d5\" href=\"notes.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d6\" href=\"author.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"toc\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/><itemref idref=\"d2\"/><itemref idref=\"d3\"/><itemref idref=\"d4\"/><itemref idref=\"d5\"/><itemref idref=\"d6\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Notice",
+        "text": "Notice"
+      },
+      {
+        "title": "Chapter one",
+        "text": "Door one\nAlpha."
+      },
+      {
+        "title": "Chapter two",
+        "text": "Door two\nBeta."
+      },
+      {
+        "title": "補註",
+        "text": "補註\nNotes."
+      },
+      {
+        "title": "Writer bio.",
+        "text": "Writer bio."
+      }
+    ]
+  },
+  {
+    "name": "anchors_hierarchy_epub2",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/all.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Preface</p><h1 id=\"one\">One</h1><p>A😀.</p><h2 id=\"child\">Child</h2><p>B.</p><h1 id=\"two\">Two</h1><p>C.</p></body></html>",
+      "OPS/toc.ncx": "<ncx xmlns=\"http://www.daisy.org/z3986/2005/ncx/\"><navMap><navPoint><navLabel><text>First</text></navLabel><content src=\"all.xhtml#one\"/><navPoint><navLabel><text>Child</text></navLabel><content src=\"all.xhtml#child\"/></navPoint></navPoint><navPoint><navLabel><text>Second</text></navLabel><content src=\"all.xhtml#two\"/></navPoint></navMap></ncx>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"2.0\"><metadata/><manifest><item id=\"d0\" href=\"all.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"toc\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Preface",
+        "text": "Preface"
+      },
+      {
+        "title": "First",
+        "text": "One\nA😀.\nChild\nB."
+      },
+      {
+        "title": "Second",
+        "text": "Two\nC."
+      }
+    ]
+  },
+  {
+    "name": "nested_backmatter_epub2",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/a.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h1>A</h1><p>Body</p></body></html>",
+      "OPS/b.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h2>付録</h2><p>Included</p></body></html>",
+      "OPS/c.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Continuation</p></body></html>",
+      "OPS/toc.ncx": "<ncx xmlns=\"http://www.daisy.org/z3986/2005/ncx/\"><navMap><navPoint><navLabel><text>Parent</text></navLabel><content src=\"a.xhtml\"/><navPoint><navLabel><text>Appendix</text></navLabel><content src=\"b.xhtml\"/></navPoint></navPoint></navMap></ncx>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"2.0\"><metadata/><manifest><item id=\"d0\" href=\"a.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"b.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d2\" href=\"c.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"toc\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/><itemref idref=\"d2\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Parent",
+        "text": "A\nBody\n付録\nIncluded\nContinuation"
+      }
+    ]
+  },
+  {
+    "name": "chapter_doors_epub3",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/front.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Notice</p></body></html>",
+      "OPS/one.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h1>Door one</h1></body></html>",
+      "OPS/one-body.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Alpha.</p></body></html>",
+      "OPS/two.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h1>Door two</h1></body></html>",
+      "OPS/two-body.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Beta.</p></body></html>",
+      "OPS/notes.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h1>補註</h1><p>Notes.</p></body></html>",
+      "OPS/author.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Writer bio.</p></body></html>",
+      "OPS/nav.xhtml": "<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><body><nav epub:type=\"toc\"><ol><li><a href=\"one.xhtml\">Chapter one</a></li><li><a href=\"two.xhtml\">Chapter two</a></li></ol></nav></body></html>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\"><metadata/><manifest><item id=\"d0\" href=\"front.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"one.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d2\" href=\"one-body.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d3\" href=\"two.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d4\" href=\"two-body.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d5\" href=\"notes.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d6\" href=\"author.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/><itemref idref=\"d2\"/><itemref idref=\"d3\"/><itemref idref=\"d4\"/><itemref idref=\"d5\"/><itemref idref=\"d6\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Notice",
+        "text": "Notice"
+      },
+      {
+        "title": "Chapter one",
+        "text": "Door one\nAlpha."
+      },
+      {
+        "title": "Chapter two",
+        "text": "Door two\nBeta."
+      },
+      {
+        "title": "補註",
+        "text": "補註\nNotes."
+      },
+      {
+        "title": "Writer bio.",
+        "text": "Writer bio."
+      }
+    ]
+  },
+  {
+    "name": "anchors_hierarchy_epub3",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/all.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Preface</p><h1 id=\"one\">One</h1><p>A😀.</p><h2 id=\"child\">Child</h2><p>B.</p><h1 id=\"two\">Two</h1><p>C.</p></body></html>",
+      "OPS/nav.xhtml": "<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><body><nav epub:type=\"toc\"><ol><li><a href=\"all.xhtml#one\">First</a><ol><li><a href=\"all.xhtml#child\">Child</a></li></ol></li><li><a href=\"all.xhtml#two\">Second</a></li></ol></nav></body></html>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\"><metadata/><manifest><item id=\"d0\" href=\"all.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Preface",
+        "text": "Preface"
+      },
+      {
+        "title": "First",
+        "text": "One\nA😀.\nChild\nB."
+      },
+      {
+        "title": "Second",
+        "text": "Two\nC."
+      }
+    ]
+  },
+  {
+    "name": "nested_backmatter_epub3",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/a.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h1>A</h1><p>Body</p></body></html>",
+      "OPS/b.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h2>付録</h2><p>Included</p></body></html>",
+      "OPS/c.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Continuation</p></body></html>",
+      "OPS/nav.xhtml": "<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><body><nav epub:type=\"toc\"><ol><li><a href=\"a.xhtml\">Parent</a><ol><li><a href=\"b.xhtml\">Appendix</a></li></ol></li></ol></nav></body></html>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\"><metadata/><manifest><item id=\"d0\" href=\"a.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"b.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d2\" href=\"c.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/><itemref idref=\"d2\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Parent",
+        "text": "A\nBody\n付録\nIncluded\nContinuation"
+      }
+    ]
+  },
+  {
+    "name": "missing_toc_short_empty",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/a.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>A</p></body></html>",
+      "OPS/blank.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><img src=\"cover.jpg\"/></body></html>",
+      "OPS/b.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>B</p><script>ignore</script><style>ignore</style><!--ignore--></body></html>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"2.0\"><metadata/><manifest><item id=\"d0\" href=\"a.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"blank.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d2\" href=\"b.xhtml\" media-type=\"application/xhtml+xml\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/><itemref idref=\"d2\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "A",
+        "text": "A"
+      },
+      {
+        "title": "B",
+        "text": "B"
+      }
+    ]
+  },
+  {
+    "name": "broken_refs",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/a.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>A</p></body></html>",
+      "OPS/b.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>B</p></body></html>",
+      "OPS/c.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>C</p></body></html>",
+      "OPS/toc.ncx": "<ncx xmlns=\"http://www.daisy.org/z3986/2005/ncx/\"><navMap><navPoint><navLabel><text>Good</text></navLabel><content src=\"a.xhtml\"/></navPoint><navPoint><navLabel><text>Missing</text></navLabel><content src=\"missing.xhtml\"/></navPoint><navPoint><navLabel><text>Bad anchor</text></navLabel><content src=\"b.xhtml#missing\"/></navPoint></navMap></ncx>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"2.0\"><metadata/><manifest><item id=\"d0\" href=\"a.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"b.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d2\" href=\"c.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"toc\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/><itemref idref=\"d2\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Good",
+        "text": "A"
+      },
+      {
+        "title": "B",
+        "text": "B\nC"
+      }
+    ]
+  },
+  {
+    "name": "paths_duplicates_reading_order",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/Text/a b.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p id=\"日本\">A</p><p>B</p></body></html>",
+      "OPS/c.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>C</p></body></html>",
+      "OPS/toc.ncx": "<ncx xmlns=\"http://www.daisy.org/z3986/2005/ncx/\"><navMap><navPoint><navLabel><text>Last</text></navLabel><content src=\"c.xhtml\"/></navPoint><navPoint><navLabel><text>First</text></navLabel><content src=\"Text/a%20b.xhtml#%E6%97%A5%E6%9C%AC\"/></navPoint><navPoint><navLabel><text>Duplicate</text></navLabel><content src=\"Text/./a%20b.xhtml#%E6%97%A5%E6%9C%AC\"/></navPoint></navMap></ncx>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"2.0\"><metadata/><manifest><item id=\"d0\" href=\"Text/a b.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"c.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"toc\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "First",
+        "text": "A\nB"
+      },
+      {
+        "title": "Last",
+        "text": "C"
+      }
+    ]
+  },
+  {
+    "name": "semantic_backmatter_inside_file",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/a.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h1>A</h1><p>Body</p><section epub:type=\"endnotes\" id=\"notes\"><h2>References</h2><p>N</p></section></body></html>",
+      "OPS/tail.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Tail</p></body></html>",
+      "OPS/nav.xhtml": "<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><body><nav epub:type=\"toc\"><ol><li><a href=\"a.xhtml\">Main</a></li></ol></nav></body></html>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\"><metadata/><manifest><item id=\"d0\" href=\"a.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"tail.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Main",
+        "text": "A\nBody"
+      },
+      {
+        "title": "References",
+        "text": "References\nN"
+      },
+      {
+        "title": "Tail",
+        "text": "Tail"
+      }
+    ]
+  },
+  {
+    "name": "body_toc_and_backlink",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/toc.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Contents</p><a id=\"notes-link\" href=\"notes.xhtml#n\">補註</a></body></html>",
+      "OPS/a.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Main</p></body></html>",
+      "OPS/notes.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><a href=\"toc.xhtml#notes-link\" id=\"n\">補註</a><p>N</p></body></html>",
+      "OPS/toc.ncx": "<ncx xmlns=\"http://www.daisy.org/z3986/2005/ncx/\"><navMap><navPoint><navLabel><text>Chapter</text></navLabel><content src=\"a.xhtml\"/></navPoint></navMap></ncx>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"2.0\"><metadata/><manifest><item id=\"d0\" href=\"toc.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"a.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d2\" href=\"notes.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"toc\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/><itemref idref=\"d2\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Contents",
+        "text": "Contents\n補註"
+      },
+      {
+        "title": "Chapter",
+        "text": "Main"
+      },
+      {
+        "title": "補註",
+        "text": "補註\nN"
+      }
+    ]
+  },
+  {
+    "name": "landmark_backmatter",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/a.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Main</p></body></html>",
+      "OPS/b.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Biography text</p></body></html>",
+      "OPS/c.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Copyright</p></body></html>",
+      "OPS/nav.xhtml": "<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><body><nav epub:type=\"toc\"><ol><li><a href=\"a.xhtml\">Chapter</a></li></ol></nav><nav epub:type=\"landmarks\"><a epub:type=\"backmatter\" href=\"b.xhtml\">About writer</a></nav></body></html>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\"><metadata/><manifest><item id=\"d0\" href=\"a.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"b.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d2\" href=\"c.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/><itemref idref=\"d2\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Chapter",
+        "text": "Main"
+      },
+      {
+        "title": "About writer",
+        "text": "Biography text"
+      },
+      {
+        "title": "Copyright",
+        "text": "Copyright"
+      }
+    ]
+  },
+  {
+    "name": "guide_backmatter",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/a.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Main</p></body></html>",
+      "OPS/b.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>End</p></body></html>",
+      "OPS/toc.ncx": "<ncx xmlns=\"http://www.daisy.org/z3986/2005/ncx/\"><navMap><navPoint><navLabel><text>Chapter</text></navLabel><content src=\"a.xhtml\"/></navPoint></navMap></ncx>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"2.0\"><metadata/><manifest><item id=\"d0\" href=\"a.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"b.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"toc\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/></spine><guide><reference type=\"colophon\" title=\"End matter\" href=\"b.xhtml\"/></guide></package>"
+    },
+    "expected": [
+      {
+        "title": "Chapter",
+        "text": "Main"
+      },
+      {
+        "title": "End matter",
+        "text": "End"
+      }
+    ]
+  },
+  {
+    "name": "unknown_continuation",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/a.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Start</p></body></html>",
+      "OPS/b.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Unlabelled continuation</p></body></html>",
+      "OPS/c.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>More</p></body></html>",
+      "OPS/toc.ncx": "<ncx xmlns=\"http://www.daisy.org/z3986/2005/ncx/\"><navMap><navPoint><navLabel><text>Chapter</text></navLabel><content src=\"a.xhtml\"/></navPoint></navMap></ncx>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"2.0\"><metadata/><manifest><item id=\"d0\" href=\"a.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"b.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d2\" href=\"c.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"toc\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/><itemref idref=\"d2\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Chapter",
+        "text": "Start\nUnlabelled continuation\nMore"
+      }
+    ]
+  },
+  {
+    "name": "inline_heading_and_entities",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/a.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>A &amp; B</p><h2><span>補</span><span>註</span></h2><p>N&nbsp;X</p></body></html>",
+      "OPS/toc.ncx": "<ncx xmlns=\"http://www.daisy.org/z3986/2005/ncx/\"><navMap><navPoint><navLabel><text>Main</text></navLabel><content src=\"a.xhtml\"/></navPoint></navMap></ncx>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"2.0\"><metadata/><manifest><item id=\"d0\" href=\"a.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"toc\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Main",
+        "text": "A & B"
+      },
+      {
+        "title": "補註",
+        "text": "補\n註\nN X"
+      }
+    ]
+  },
+  {
+    "name": "missing_ncx_resource",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/a.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Start</p></body></html>",
+      "OPS/b.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Unlabelled continuation</p></body></html>",
+      "OPS/c.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>More</p></body></html>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"2.0\"><metadata/><manifest><item id=\"d0\" href=\"a.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"b.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d2\" href=\"c.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"toc\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/><itemref idref=\"d2\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Start",
+        "text": "Start"
+      },
+      {
+        "title": "Unlabelled continuation",
+        "text": "Unlabelled continuation"
+      },
+      {
+        "title": "More",
+        "text": "More"
+      }
+    ]
+  },
+  {
+    "name": "malformed_ncx",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/a.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Start</p></body></html>",
+      "OPS/b.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Unlabelled continuation</p></body></html>",
+      "OPS/c.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>More</p></body></html>",
+      "OPS/toc.ncx": "<ncx><navMap><broken",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"2.0\"><metadata/><manifest><item id=\"d0\" href=\"a.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"b.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d2\" href=\"c.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"toc\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/><itemref idref=\"d2\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Start",
+        "text": "Start"
+      },
+      {
+        "title": "Unlabelled continuation",
+        "text": "Unlabelled continuation"
+      },
+      {
+        "title": "More",
+        "text": "More"
+      }
+    ]
+  },
+  {
+    "name": "missing_nav_uses_ncx",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/front.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Notice</p></body></html>",
+      "OPS/one.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h1>Door one</h1></body></html>",
+      "OPS/one-body.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Alpha.</p></body></html>",
+      "OPS/two.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h1>Door two</h1></body></html>",
+      "OPS/two-body.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Beta.</p></body></html>",
+      "OPS/notes.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h1>補註</h1><p>Notes.</p></body></html>",
+      "OPS/author.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Writer bio.</p></body></html>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\"><metadata/><manifest><item id=\"d0\" href=\"front.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"one.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d2\" href=\"one-body.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d3\" href=\"two.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d4\" href=\"two-body.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d5\" href=\"notes.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d6\" href=\"author.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/><item id=\"toc\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/><itemref idref=\"d2\"/><itemref idref=\"d3\"/><itemref idref=\"d4\"/><itemref idref=\"d5\"/><itemref idref=\"d6\"/></spine></package>",
+      "OPS/toc.ncx": "<ncx xmlns=\"http://www.daisy.org/z3986/2005/ncx/\"><navMap><navPoint><navLabel><text>Chapter one</text></navLabel><content src=\"one.xhtml\"/></navPoint><navPoint><navLabel><text>Chapter two</text></navLabel><content src=\"two.xhtml\"/></navPoint></navMap></ncx>"
+    },
+    "expected": [
+      {
+        "title": "Notice",
+        "text": "Notice"
+      },
+      {
+        "title": "Chapter one",
+        "text": "Door one\nAlpha."
+      },
+      {
+        "title": "Chapter two",
+        "text": "Door two\nBeta."
+      },
+      {
+        "title": "補註",
+        "text": "補註\nNotes."
+      },
+      {
+        "title": "Writer bio.",
+        "text": "Writer bio."
+      }
+    ]
+  },
+  {
+    "name": "nav_preferred_to_ncx",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/front.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Notice</p></body></html>",
+      "OPS/one.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h1>Door one</h1></body></html>",
+      "OPS/one-body.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Alpha.</p></body></html>",
+      "OPS/two.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h1>Door two</h1></body></html>",
+      "OPS/two-body.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Beta.</p></body></html>",
+      "OPS/notes.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h1>補註</h1><p>Notes.</p></body></html>",
+      "OPS/author.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Writer bio.</p></body></html>",
+      "OPS/nav.xhtml": "<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><body><nav epub:type=\"toc\"><ol><li><a href=\"one.xhtml\">Chapter one</a></li><li><a href=\"two.xhtml\">Chapter two</a></li></ol></nav></body></html>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\"><metadata/><manifest><item id=\"d0\" href=\"front.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"one.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d2\" href=\"one-body.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d3\" href=\"two.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d4\" href=\"two-body.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d5\" href=\"notes.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d6\" href=\"author.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/><item id=\"toc\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/><itemref idref=\"d2\"/><itemref idref=\"d3\"/><itemref idref=\"d4\"/><itemref idref=\"d5\"/><itemref idref=\"d6\"/></spine></package>",
+      "OPS/toc.ncx": "<ncx xmlns=\"http://www.daisy.org/z3986/2005/ncx/\"><navMap><navPoint><navLabel><text>Wrong legacy title</text></navLabel><content src=\"one.xhtml\"/></navPoint><navPoint><navLabel><text>Chapter two</text></navLabel><content src=\"two.xhtml\"/></navPoint></navMap></ncx>"
+    },
+    "expected": [
+      {
+        "title": "Notice",
+        "text": "Notice"
+      },
+      {
+        "title": "Chapter one",
+        "text": "Door one\nAlpha."
+      },
+      {
+        "title": "Chapter two",
+        "text": "Door two\nBeta."
+      },
+      {
+        "title": "補註",
+        "text": "補註\nNotes."
+      },
+      {
+        "title": "Writer bio.",
+        "text": "Writer bio."
+      }
+    ]
+  },
+  {
+    "name": "unlinked_parent_and_named_anchor",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/all.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Preface</p><a name=\"one\"></a><h1>One</h1><p>A😀.</p><h2 id=\"child\">Child</h2><p>B.</p><h1 id=\"two\">Two</h1><p>C.</p></body></html>",
+      "OPS/nav.xhtml": "<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><body><nav epub:type=\"toc\"><ol><li><span>First</span><ol><li><a href=\"all.xhtml#one\">Child</a></li></ol></li><li><a href=\"all.xhtml#two\">Second</a></li></ol></nav></body></html>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\"><metadata/><manifest><item id=\"d0\" href=\"all.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Preface",
+        "text": "Preface"
+      },
+      {
+        "title": "First",
+        "text": "One\nA😀.\nChild\nB."
+      },
+      {
+        "title": "Second",
+        "text": "Two\nC."
+      }
+    ]
+  },
+  {
+    "name": "explicit_chapter_resets_backmatter",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/a.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h1>A</h1><p>Body</p><section epub:type=\"endnotes\" id=\"notes\"><h2>References</h2><p>N</p></section><h1 id=\"two\">Two</h1></body></html>",
+      "OPS/tail.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Tail</p></body></html>",
+      "OPS/nav.xhtml": "<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><body><nav epub:type=\"toc\"><ol><li><a href=\"a.xhtml\">Main</a></li><li><a href=\"a.xhtml#two\">Second</a></li></ol></nav></body></html>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\"><metadata/><manifest><item id=\"d0\" href=\"a.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"tail.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Main",
+        "text": "A\nBody"
+      },
+      {
+        "title": "References",
+        "text": "References\nN"
+      },
+      {
+        "title": "Second",
+        "text": "Two\nTail"
+      }
+    ]
+  },
+  {
+    "name": "unicode_utf-16",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/all.xhtml": "<?xml version=\"1.0\" encoding=\"UTF-16\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Preface</p><h1 id=\"one\">One</h1><p>A😀.</p><h2 id=\"child\">Child</h2><p>B.</p><h1 id=\"two\">Two</h1><p>C.</p></body></html>",
+      "OPS/nav.xhtml": "<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><body><nav epub:type=\"toc\"><ol><li><a href=\"all.xhtml#one\">First</a><ol><li><a href=\"all.xhtml#child\">Child</a></li></ol></li><li><a href=\"all.xhtml#two\">Second</a></li></ol></nav></body></html>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\"><metadata/><manifest><item id=\"d0\" href=\"all.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Preface",
+        "text": "Preface"
+      },
+      {
+        "title": "First",
+        "text": "One\nA😀.\nChild\nB."
+      },
+      {
+        "title": "Second",
+        "text": "Two\nC."
+      }
+    ],
+    "encodings": {
+      "META-INF/container.xml": "utf-16",
+      "OPS/all.xhtml": "utf-16",
+      "OPS/nav.xhtml": "utf-16",
+      "OPS/book.opf": "utf-16"
+    }
+  },
+  {
+    "name": "unicode_utf-16-le",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/all.xhtml": "<?xml version=\"1.0\" encoding=\"UTF-16\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Preface</p><h1 id=\"one\">One</h1><p>A😀.</p><h2 id=\"child\">Child</h2><p>B.</p><h1 id=\"two\">Two</h1><p>C.</p></body></html>",
+      "OPS/nav.xhtml": "<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><body><nav epub:type=\"toc\"><ol><li><a href=\"all.xhtml#one\">First</a><ol><li><a href=\"all.xhtml#child\">Child</a></li></ol></li><li><a href=\"all.xhtml#two\">Second</a></li></ol></nav></body></html>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\"><metadata/><manifest><item id=\"d0\" href=\"all.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Preface",
+        "text": "Preface"
+      },
+      {
+        "title": "First",
+        "text": "One\nA😀.\nChild\nB."
+      },
+      {
+        "title": "Second",
+        "text": "Two\nC."
+      }
+    ],
+    "encodings": {
+      "META-INF/container.xml": "utf-16-le",
+      "OPS/all.xhtml": "utf-16-le",
+      "OPS/nav.xhtml": "utf-16-le",
+      "OPS/book.opf": "utf-16-le"
+    }
+  },
+  {
+    "name": "unicode_utf-16-be",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/all.xhtml": "<?xml version=\"1.0\" encoding=\"UTF-16\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Preface</p><h1 id=\"one\">One</h1><p>A😀.</p><h2 id=\"child\">Child</h2><p>B.</p><h1 id=\"two\">Two</h1><p>C.</p></body></html>",
+      "OPS/nav.xhtml": "<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><body><nav epub:type=\"toc\"><ol><li><a href=\"all.xhtml#one\">First</a><ol><li><a href=\"all.xhtml#child\">Child</a></li></ol></li><li><a href=\"all.xhtml#two\">Second</a></li></ol></nav></body></html>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\"><metadata/><manifest><item id=\"d0\" href=\"all.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Preface",
+        "text": "Preface"
+      },
+      {
+        "title": "First",
+        "text": "One\nA😀.\nChild\nB."
+      },
+      {
+        "title": "Second",
+        "text": "Two\nC."
+      }
+    ],
+    "encodings": {
+      "META-INF/container.xml": "utf-16-be",
+      "OPS/all.xhtml": "utf-16-be",
+      "OPS/nav.xhtml": "utf-16-be",
+      "OPS/book.opf": "utf-16-be"
+    }
+  },
+  {
+    "name": "ruby_is_not_read_twice",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/a.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p><ruby>常<rp>(</rp><rt>つね</rt><rp>)</rp></ruby><ruby>朝<rt>とも</rt></ruby></p></body></html>",
+      "OPS/b.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Unlabelled continuation</p></body></html>",
+      "OPS/c.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>More</p></body></html>",
+      "OPS/toc.ncx": "<ncx xmlns=\"http://www.daisy.org/z3986/2005/ncx/\"><navMap><navPoint><navLabel><text>Chapter</text></navLabel><content src=\"a.xhtml\"/></navPoint></navMap></ncx>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"2.0\"><metadata/><manifest><item id=\"d0\" href=\"a.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"b.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d2\" href=\"c.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"toc\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/><itemref idref=\"d2\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Chapter",
+        "text": "常\n朝\nUnlabelled continuation\nMore"
+      }
+    ]
+  },
+  {
+    "name": "ruby_in_navigation_label",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/front.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Notice</p></body></html>",
+      "OPS/one.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h1>Door one</h1></body></html>",
+      "OPS/one-body.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Alpha.</p></body></html>",
+      "OPS/two.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h1>Door two</h1></body></html>",
+      "OPS/two-body.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Beta.</p></body></html>",
+      "OPS/notes.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h1>補註</h1><p>Notes.</p></body></html>",
+      "OPS/author.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Writer bio.</p></body></html>",
+      "OPS/nav.xhtml": "<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><body><nav epub:type=\"toc\"><ol><li><a href=\"one.xhtml\"><ruby>章<rt>しょう</rt></ruby> one</a></li><li><a href=\"two.xhtml\">Chapter two</a></li></ol></nav></body></html>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\"><metadata/><manifest><item id=\"d0\" href=\"front.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"one.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d2\" href=\"one-body.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d3\" href=\"two.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d4\" href=\"two-body.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d5\" href=\"notes.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d6\" href=\"author.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/><itemref idref=\"d2\"/><itemref idref=\"d3\"/><itemref idref=\"d4\"/><itemref idref=\"d5\"/><itemref idref=\"d6\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Notice",
+        "text": "Notice"
+      },
+      {
+        "title": "章one",
+        "text": "Door one\nAlpha."
+      },
+      {
+        "title": "Chapter two",
+        "text": "Door two\nBeta."
+      },
+      {
+        "title": "補註",
+        "text": "補註\nNotes."
+      },
+      {
+        "title": "Writer bio.",
+        "text": "Writer bio."
+      }
+    ]
+  },
+  {
+    "name": "unlisted_cover_image_doors_epub2",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/front.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Notice</p></body></html>",
+      "OPS/one.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><img src=\"door.jpg\"/></body></html>",
+      "OPS/one-body.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Alpha.</p></body></html>",
+      "OPS/two.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><img src=\"door.jpg\"/></body></html>",
+      "OPS/two-body.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Beta.</p></body></html>",
+      "OPS/notes.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h1>補註</h1><p>Notes.</p></body></html>",
+      "OPS/author.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Writer bio.</p></body></html>",
+      "OPS/toc.ncx": "<ncx xmlns=\"http://www.daisy.org/z3986/2005/ncx/\"><navMap><navPoint><navLabel><text>Cover</text></navLabel><content src=\"cover.xhtml\"/></navPoint><navPoint><navLabel><text>Missing</text></navLabel><content src=\"missing.xhtml\"/></navPoint><navPoint><navLabel><text>Chapter one</text></navLabel><content src=\"one.xhtml\"/></navPoint><navPoint><navLabel><text>Chapter two</text></navLabel><content src=\"two.xhtml\"/></navPoint></navMap></ncx>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"2.0\"><metadata/><manifest><item id=\"d0\" href=\"front.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"one.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d2\" href=\"one-body.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d3\" href=\"two.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d4\" href=\"two-body.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d5\" href=\"notes.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d6\" href=\"author.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"toc\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/><item id=\"cover\" href=\"cover.xhtml\" media-type=\"application/xhtml+xml\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/><itemref idref=\"d2\"/><itemref idref=\"d3\"/><itemref idref=\"d4\"/><itemref idref=\"d5\"/><itemref idref=\"d6\"/></spine></package>",
+      "OPS/cover.xhtml": "<html><body><img src=\"cover.jpg\"/></body></html>"
+    },
+    "expected": [
+      {
+        "title": "Notice",
+        "text": "Notice"
+      },
+      {
+        "title": "Chapter one",
+        "text": "Alpha."
+      },
+      {
+        "title": "Chapter two",
+        "text": "Beta."
+      },
+      {
+        "title": "補註",
+        "text": "補註\nNotes."
+      },
+      {
+        "title": "Writer bio.",
+        "text": "Writer bio."
+      }
+    ]
+  },
+  {
+    "name": "unlisted_cover_image_doors_epub3",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/front.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Notice</p></body></html>",
+      "OPS/one.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><img src=\"door.jpg\"/></body></html>",
+      "OPS/one-body.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Alpha.</p></body></html>",
+      "OPS/two.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><img src=\"door.jpg\"/></body></html>",
+      "OPS/two-body.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Beta.</p></body></html>",
+      "OPS/notes.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><h1>補註</h1><p>Notes.</p></body></html>",
+      "OPS/author.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Writer bio.</p></body></html>",
+      "OPS/nav.xhtml": "<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><body><nav epub:type=\"toc\"><ol><li><a href=\"cover.xhtml\">Cover</a></li><li><a href=\"missing.xhtml\">Missing</a></li><li><a href=\"one.xhtml\">Chapter one</a></li><li><a href=\"two.xhtml\">Chapter two</a></li></ol></nav></body></html>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\"><metadata/><manifest><item id=\"d0\" href=\"front.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"one.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d2\" href=\"one-body.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d3\" href=\"two.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d4\" href=\"two-body.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d5\" href=\"notes.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d6\" href=\"author.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/><item id=\"cover\" href=\"cover.xhtml\" media-type=\"application/xhtml+xml\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/><itemref idref=\"d2\"/><itemref idref=\"d3\"/><itemref idref=\"d4\"/><itemref idref=\"d5\"/><itemref idref=\"d6\"/></spine></package>",
+      "OPS/cover.xhtml": "<html><body><img src=\"cover.jpg\"/></body></html>"
+    },
+    "expected": [
+      {
+        "title": "Notice",
+        "text": "Notice"
+      },
+      {
+        "title": "Chapter one",
+        "text": "Alpha."
+      },
+      {
+        "title": "Chapter two",
+        "text": "Beta."
+      },
+      {
+        "title": "補註",
+        "text": "補註\nNotes."
+      },
+      {
+        "title": "Writer bio.",
+        "text": "Writer bio."
+      }
+    ]
+  },
+  {
+    "name": "bad_anchor_does_not_override_valid_anchor",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/all.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Preface</p><h1 id=\"one\">One</h1><p>A😀.</p><h2 id=\"child\">Child</h2><p>B.</p><h1 id=\"two\">Two</h1><p>C.</p></body></html>",
+      "OPS/nav.xhtml": "<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><body><nav epub:type=\"toc\"><ol><li><a href=\"all.xhtml#missing\">Wrong</a></li><li><a href=\"all.xhtml#one\">First</a><ol><li><a href=\"all.xhtml#child\">Child</a></li></ol></li><li><a href=\"all.xhtml#two\">Second</a></li></ol></nav></body></html>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\"><metadata/><manifest><item id=\"d0\" href=\"all.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Preface",
+        "text": "Preface"
+      },
+      {
+        "title": "First",
+        "text": "One\nA😀.\nChild\nB."
+      },
+      {
+        "title": "Second",
+        "text": "Two\nC."
+      }
+    ]
+  },
+  {
+    "name": "all_toc_targets_invalid",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/a.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>A</p></body></html>",
+      "OPS/b.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>B</p></body></html>",
+      "OPS/c.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>C</p></body></html>",
+      "OPS/toc.ncx": "<ncx xmlns=\"http://www.daisy.org/z3986/2005/ncx/\"><navMap><navPoint><navLabel><text>Good</text></navLabel><content src=\"absent.xhtml\"/></navPoint><navPoint><navLabel><text>Missing</text></navLabel><content src=\"missing.xhtml\"/></navPoint><navPoint><navLabel><text>Bad anchor</text></navLabel><content src=\"b.xhtml#missing\"/></navPoint></navMap></ncx>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"2.0\"><metadata/><manifest><item id=\"d0\" href=\"a.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"b.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d2\" href=\"c.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"toc\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/><itemref idref=\"d2\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "A",
+        "text": "A"
+      },
+      {
+        "title": "B",
+        "text": "B"
+      },
+      {
+        "title": "C",
+        "text": "C"
+      }
+    ]
+  },
+  {
+    "name": "missing_file_does_not_split_continuation",
+    "resources": {
+      "mimetype": "application/epub+zip",
+      "META-INF/container.xml": "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OPS/book.opf\"/></rootfiles></container>",
+      "OPS/a.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Start</p></body></html>",
+      "OPS/b.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>Unlabelled continuation</p></body></html>",
+      "OPS/c.xhtml": "<?xml version=\"1.0\" encoding=\"utf-8\"?><html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\"><head><title>Storage title</title></head><body><p>More</p></body></html>",
+      "OPS/toc.ncx": "<ncx xmlns=\"http://www.daisy.org/z3986/2005/ncx/\"><navMap><navPoint><navLabel><text>Missing</text></navLabel><content src=\"absent.xhtml\"/></navPoint><navPoint><navLabel><text>Chapter</text></navLabel><content src=\"a.xhtml\"/></navPoint></navMap></ncx>",
+      "OPS/book.opf": "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"2.0\"><metadata/><manifest><item id=\"d0\" href=\"a.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d1\" href=\"b.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"d2\" href=\"c.xhtml\" media-type=\"application/xhtml+xml\"/><item id=\"toc\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/></manifest><spine toc=\"toc\"><itemref idref=\"d0\"/><itemref idref=\"d1\"/><itemref idref=\"d2\"/></spine></package>"
+    },
+    "expected": [
+      {
+        "title": "Chapter",
+        "text": "Start\nUnlabelled continuation\nMore"
+      }
+    ]
+  }
+]
