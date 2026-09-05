@@ -62,7 +62,7 @@ class AudioGenerator {
     final output = outputDirectory == null && fileWriter == null
         ? Directory(path.join(
             (await getApplicationDocumentsDirectory()).path,
-            'TTS Text to MP3',
+            'YomiPalette',
           ))
         : outputDirectory == null
             ? null

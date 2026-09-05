@@ -1,4 +1,6 @@
-# TTS Text to MP3 Mobile
+# YomiPalette Mobile
+
+Turn your digital books into audio, with your choice of voice.
 
 [English](README.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
@@ -43,3 +45,9 @@ flutter run
 iOS builds require macOS and Xcode. Never commit API keys, signing files, or local platform configuration.
 
 GitHub Actions validates analysis, tests, an Android debug APK, and a no-codesign iOS build. Store releases require separately configured Android and Apple signing credentials. Do not distribute the CI debug APK as a production release.
+
+## Support YomiPalette
+
+If YomiPalette is useful to you, consider supporting its continued development. Your support helps improve features, fix bugs, and test Windows and Android compatibility. Support is optional and does not change which app features you can use.
+
+[Support development](https://github.com/sponsors/tjsongwei)

@@ -1,4 +1,6 @@
-# TTS Text to MP3 Mobile
+# YomiPalette Mobile
+
+電子書籍を、好きな声で。
 
 [English](README.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
@@ -56,3 +58,9 @@ flutter run
 AndroidとiOSのホストプロジェクトはリポジトリに含まれます。APIキーや署名ファイルをGitへコミットしないでください。
 
 GitHub Actionsは解析、テスト、AndroidデバッグAPK、署名なしiOSビルドを検証します。ストア公開用Android App BundleとiOSアーカイブには、それぞれの開発者アカウントとリポジトリ外で管理する署名情報を別途設定する必要があります。CIのデバッグAPKを一般配布しないでください。
+
+## YomiPaletteの開発を応援する
+
+YomiPaletteが役に立ったら、開発の継続を応援していただけるとうれしいです。いただいた支援は、機能改善・不具合修正・Windows／Androidでの動作検証に役立てます。支援は任意で、支援の有無によって利用できる機能は変わりません。
+
+[GitHub Sponsorsで開発を応援する](https://github.com/sponsors/tjsongwei)

@@ -50,7 +50,7 @@ class _TtsMobileAppState extends State<TtsMobileApp> {
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
-        title: 'TTS Text to MP3',
+        title: 'YomiPalette',
         theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
         home: HomeScreen(
           onLocaleChanged: (value) => setState(() => locale = value),

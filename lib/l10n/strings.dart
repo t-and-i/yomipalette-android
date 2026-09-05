@@ -8,7 +8,7 @@ class AppStrings {
 
   static const _values = <String, Map<String, String>>{
     'en': {
-      'title': 'TTS Text to MP3',
+      'title': 'YomiPalette',
       'file': 'TXT / EPUB file',
       'choose': 'Choose file',
       'textEncoding': 'TXT character encoding',
@@ -85,7 +85,7 @@ class AppStrings {
       'hide': 'Hide',
     },
     'ja': {
-      'title': 'TTS Text to MP3',
+      'title': 'YomiPalette',
       'file': 'TXT / EPUBファイル',
       'choose': 'ファイルを選択',
       'textEncoding': 'TXT文字コード',
@@ -158,7 +158,7 @@ class AppStrings {
       'hide': '非表示',
     },
     'zh': {
-      'title': 'TTS Text to MP3',
+      'title': 'YomiPalette',
       'file': 'TXT / EPUB文件',
       'choose': '选择文件',
       'textEncoding': 'TXT字符编码',

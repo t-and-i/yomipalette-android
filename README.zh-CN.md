@@ -1,4 +1,6 @@
-# TTS Text to MP3 Mobile
+# YomiPalette Mobile
+
+用喜欢的声音，把电子书变成有声书。
 
 [English](README.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
@@ -27,3 +29,9 @@ TXT字符编码默认为“自动检测”。如果检测结果不正确，可�
 - **Edge TTS：**无需API密钥即可使用，但它使用Microsoft Edge Read Aloud的非官方服务端点，并不是受支持的Flutter公共SDK。服务端协议变更可能导致功能突然失效；需要稳定服务合同时请使用Azure Speech。
 
 这些限制仅适用于移动版，不影响桌面版。开发环境和完整安全说明请参阅[日语README](README.ja.md)。
+
+## 支持 YomiPalette 开发
+
+如果 YomiPalette 对您有帮助，欢迎支持项目的持续开发。您的支持将用于功能改进、问题修复以及 Windows 和 Android 的兼容性测试。支持完全自愿，不影响您可以使用的应用功能。
+
+[通过 GitHub Sponsors 支持开发](https://github.com/sponsors/tjsongwei)
