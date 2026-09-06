@@ -8,7 +8,7 @@ Flutter client for Android and iOS, maintained as a separate project under `mobi
 
 ## Initial scope
 
-- TXT and EPUB input. TXT supports automatic detection and manual selection of UTF-8, UTF-16, UTF-32, CP932/Shift_JIS, GB18030, and Big5
+- TXT, EPUB and PDF input. TXT supports automatic detection and manual selection of UTF-8, UTF-16, UTF-32, CP932/Shift_JIS, GB18030, and Big5
 - Split by chapter or character limit (default: 5000)
 - Approximately 15-second preview from the selected unit, or the first unit
 - Edge TTS, Azure Speech, Google Cloud TTS, and installed Android TTS engines
@@ -17,6 +17,8 @@ Flutter client for Android and iOS, maintained as a separate project under `mobi
 - Direct output to a user-selected folder, with persisted Android folder permission
 - Resume from the first unfinished unit after a quota or network failure
 - English, Japanese, and Simplified Chinese UI
+
+MOBI, AZW, and AZW3 (Kindle) input is **not supported on mobile** at this time. The desktop version reads them via the `mobi` Python package (KF8 EPUB is reused for AZW3 chapter splits). On mobile, use the desktop build, or pre-convert Kindle files to EPUB with Calibre before importing.
 
 TXT encoding defaults to automatic detection. If the result is incorrect, select an encoding in the TXT character-encoding field to reload the original file bytes. Encoding detection cannot be perfect for every legacy file. EPUB processing is unaffected.
 
@@ -33,7 +35,7 @@ These restrictions apply only to the mobile project. Desktop providers remain un
 
 ## Bootstrap
 
-Install Flutter, then run:
+Install Flutter 3.47 or later (Dart 3.13 or later), then run:
 
 ```bash
 cd mobile
@@ -50,4 +52,11 @@ GitHub Actions validates analysis, tests, an Android debug APK, and a no-codesig
 
 If YomiPalette is useful to you, consider supporting its continued development. Your support helps improve features, fix bugs, and test Windows and Android compatibility. Support is optional and does not change which app features you can use.
 
-[Support development](https://github.com/sponsors/tjsongwei)
+- [Support via GitHub Sponsors](https://github.com/sponsors/tjsongwei)
+- [Support via Buy Me a Coffee](https://buymeacoffee.com/tjsongweic)
+
+## PDF input
+
+PDFs with embedded text are supported. **By chapter / page** creates units such as `Page 001` in physical page order; **By character count** joins all extracted page text before splitting. PDF bookmarks are not used as chapter boundaries. Pages without text (blank or image-only) are skipped, preserving original page numbers in titles.
+
+OCR is not supported. Image-only/scanned PDFs cannot be read; mixed documents contribute only their text pages. PDFs requiring a password are not supported. Vertical text, columns, tables, and unusual fonts may produce incorrect reading order or extraction. PDF text is extracted on the device; speech generation follows the normal behavior of the selected TTS provider.
