@@ -155,7 +155,7 @@ List<Chapter> readEpubSections(Uint8List bytes) {
   String read(String name) {
     final file = archive.findFile(name);
     if (file == null) throw FormatException('Missing EPUB resource: $name');
-    return _decode(file.content as List<int>);
+    return _decode(file.content);
   }
 
   final container = XmlDocument.parse(read('META-INF/container.xml'));

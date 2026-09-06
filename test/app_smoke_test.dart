@@ -164,14 +164,14 @@ void main() {
     await tester.pumpWidget(const TtsMobileApp());
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.text('Choose a TXT or EPUB file to display output units.'),
+      find.text('Choose a TXT, EPUB or PDF file to display output units.'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
 
     expect(find.text('Output units'), findsOneWidget);
     expect(
-      find.text('Choose a TXT or EPUB file to display output units.'),
+      find.text('Choose a TXT, EPUB or PDF file to display output units.'),
       findsOneWidget,
     );
   });

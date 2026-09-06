@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:charset_converter/charset_converter.dart';
 import 'epub_reader.dart';
+import 'pdf_reader.dart';
 
 import '../models/chapter.dart';
 
@@ -29,7 +30,8 @@ class DocumentReader {
       return _readText(name, bytes, textEncoding);
     }
     if (lower.endsWith('.epub')) return readEpubSections(bytes);
-    throw const FormatException('Only TXT and EPUB files are supported.');
+    if (lower.endsWith('.pdf')) return readPdfSections(bytes);
+    throw const FormatException('Only TXT, EPUB and PDF files are supported.');
   }
 
   static Future<List<Chapter>> _readText(

@@ -28,7 +28,7 @@ void main() {
         archive.addFile(ArchiveFile(entry.key as String, bytes.length, bytes));
       }
       final chapters = await DocumentReader.read(
-          'fixture.epub', Uint8List.fromList(ZipEncoder().encode(archive)!));
+          'fixture.epub', Uint8List.fromList(ZipEncoder().encode(archive)));
       expect(chapters.map((c) => {'title': c.title, 'text': c.text}).toList(),
           fixture['expected']);
       expect(chapters.map((c) => c.index).toList(),
