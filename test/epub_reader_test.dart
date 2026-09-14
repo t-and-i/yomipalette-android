@@ -8,7 +8,7 @@ import 'package:tts_text_mp3_mobile/services/document_reader.dart';
 
 void main() {
   final cases =
-      jsonDecode(File('../tests/fixtures/epub_cases.json').readAsStringSync())
+      jsonDecode(File('test/fixtures/epub_cases.json').readAsStringSync())
           as List;
   for (final fixture in cases) {
     test('EPUB ${fixture['name']}', () async {

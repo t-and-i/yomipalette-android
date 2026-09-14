@@ -1,5 +1,5 @@
 name: tts_text_mp3_mobile
-description: Android and iOS client for YomiPalette.
+description: Android client for YomiPalette.
 publish_to: none
 version: 0.2.0+8
 

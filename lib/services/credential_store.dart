@@ -6,9 +6,6 @@ class CredentialStore {
       : _storage = storage ??
             const FlutterSecureStorage(
               aOptions: AndroidOptions(encryptedSharedPreferences: true),
-              iOptions: IOSOptions(
-                accessibility: KeychainAccessibility.unlocked_this_device,
-              ),
             );
 
   final FlutterSecureStorage _storage;

@@ -1,10 +1,10 @@
-# YomiPalette Mobile
+# YomiPalette Android
 
 Turn your digital books into audio, with your choice of voice.
 
 [English](README.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
-Flutter client for Android and iOS, maintained as a separate project under `mobile/` in the desktop repository.
+Android Flutter client for YomiPalette, maintained in **yomipalette-android**. The Windows/macOS app is maintained in [yomipalette-desktop](https://github.com/t-and-i/yomipalette-desktop). iOS development has ended; this repository targets Android only.
 
 ## Initial scope
 
@@ -12,7 +12,7 @@ Flutter client for Android and iOS, maintained as a separate project under `mobi
 - Split by chapter or character limit (default: 5000)
 - Approximately 15-second preview from the selected unit, or the first unit
 - Edge TTS, Azure Speech, Google Cloud TTS, and installed Android TTS engines
-- Credentials stored in Android Keystore/iOS Keychain or kept for the session only
+- Credentials stored in Android Keystore or kept for the session only
 - MP3 generation, app-document storage, and system sharing
 - Direct output to a user-selected folder, with persisted Android folder permission
 - Resume from the first unfinished unit after a quota or network failure
@@ -27,7 +27,7 @@ Select an output folder to save there directly. If no folder is selected, files 
 ## Unsupported features and reasons
 
 - **Google service-account JSON:** not accepted because it contains a reusable private key. Secure storage protects data at rest but cannot guarantee protection while a rooted/jailbroken device or runtime hook observes the app using it. Google mobile support is API-key-only.
-- **OpenAI:** deferred because OpenAI advises against exposing secret API keys in client-side apps. Keystore/Keychain does not eliminate runtime extraction. It can be reconsidered with a backend relay.
+- **OpenAI:** deferred because OpenAI advises against exposing secret API keys in client-side apps. Android Keystore does not eliminate runtime extraction. It can be reconsidered with a backend relay.
 - **Edge TTS:** available without an API key. It uses the same unofficial Microsoft Edge Read Aloud service family as the desktop provider, not a supported public Flutter SDK, so a service-side protocol change can break it without notice. Use Azure Speech where a supported service contract is required.
 - **Android device TTS:** Android only. The app lists enabled TTS engines and their available voices instead of requiring Samsung TTS specifically. Language data may need to be installed in Android settings. Device synthesis is converted from 16-bit PCM WAV to MP3 with the bundled LAME encoder; engines that return another file format are reported as unsupported.
 
@@ -38,15 +38,15 @@ These restrictions apply only to the mobile project. Desktop providers remain un
 Install Flutter 3.47 or later (Dart 3.13 or later), then run:
 
 ```bash
-cd mobile
+cd yomipalette-android
 flutter pub get
 flutter test
 flutter run
 ```
 
-iOS builds require macOS and Xcode. Never commit API keys, signing files, or local platform configuration.
+Install the Android SDK and satisfy the Android requirements reported by `flutter doctor`. Never commit API keys, signing files, or local platform configuration.
 
-GitHub Actions validates analysis, tests, an Android debug APK, and a no-codesign iOS build. Store releases require separately configured Android and Apple signing credentials. Do not distribute the CI debug APK as a production release.
+GitHub Actions validates analysis, tests, and an Android debug APK. Pushing a new `v*` tag builds a release-mode APK and publishes it to this repository. The current release build uses debug signing and is for testing; production distribution and Google Play require separately configured release signing. No Apple toolchain is required.
 
 ## Support YomiPalette
 
@@ -60,3 +60,13 @@ If YomiPalette is useful to you, consider supporting its continued development. 
 PDFs with embedded text are supported. **By chapter / page** creates units such as `Page 001` in physical page order; **By character count** joins all extracted page text before splitting. PDF bookmarks are not used as chapter boundaries. Pages without text (blank or image-only) are skipped, preserving original page numbers in titles.
 
 OCR is not supported. Image-only/scanned PDFs cannot be read; mixed documents contribute only their text pages. PDFs requiring a password are not supported. Vertical text, columns, tables, and unusual fonts may produce incorrect reading order or extraction. PDF text is extracted on the device; speech generation follows the normal behavior of the selected TTS provider.
+
+## Repository development
+
+Run `flutter analyze`, `flutter test`, and `flutter build apk --release` from this repository root. EPUB cases and synthetic PDF fixtures are self-contained under `test/fixtures/`; PDF fixtures can be regenerated with `python test/fixtures/pdf/generate.py` after installing `pypdf`. Linux tests skip native PDFium cases; run the tests on Windows or macOS to cover them.
+
+Versions are managed independently in `pubspec.yaml`. The Android application ID and internal Dart package name are preserved for compatibility. Historical combined releases remain in [the desktop repository](https://github.com/t-and-i/yomipalette-desktop/releases). New Android releases will appear [here](https://github.com/t-and-i/yomipalette-android/releases).
+
+## License
+
+Released under the [MIT License](LICENSE). Copyright (c) 2026 YuluEthan.

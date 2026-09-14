@@ -8,9 +8,17 @@ build/
 coverage/
 android/.gradle/
 android/local.properties
-ios/Pods/
-ios/.symlinks/
-ios/Flutter/ephemeral/
 *.jks
 *.keystore
 key.properties
+
+# Local credentials and generated files
+.env
+.env.*
+config.json
+credentials*.json
+client_secret*.json
+*service-account*.json
+__pycache__/
+*.py[cod]
+release/

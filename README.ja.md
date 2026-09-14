@@ -1,10 +1,10 @@
-# YomiPalette Mobile
+# YomiPalette Android
 
 電子書籍を、好きな声で。
 
 [English](README.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
-Android・iOS向けのFlutterアプリです。デスクトップ版とは別プロジェクトですが、同じリポジトリの`mobile/`で管理します。
+Android向けのFlutterアプリです。**yomipalette-android** で独立して管理します。Windows・macOS版は [yomipalette-desktop](https://github.com/t-and-i/yomipalette-desktop) で開発します。iOSの開発は終了し、このリポジトリはAndroidのみを対象とします。
 
 ## 初期版の対応範囲
 
@@ -12,7 +12,7 @@ Android・iOS向けのFlutterアプリです。デスクトップ版とは別プ
 - 章ごと／指定文字数ごとの分割（初期値5000文字）
 - 選択した出力単位の約15秒音声確認。未選択時は先頭を使用
 - Edge TTS、Azure Speech、Google Cloud TTSの音声一覧取得・MP3生成
-- APIキーをAndroid Keystore／iOS Keychainで安全に保存、またはセッション中だけ保持
+- APIキーをAndroid Keystoreで安全に保存、またはセッション中だけ保持
 - MP3のアプリ文書領域への保存と共有
 - ユーザーが選択したフォルダへの直接保存。AndroidではOSの永続的なフォルダ権限を使用
 - 使用制限や通信エラーで停止した場合、完成済みファイルを維持して未完了部分から生成を再開
@@ -34,7 +34,7 @@ Google Cloud TTSは、利用者自身のAPIキー方式だけを提供します�
 
 ### OpenAI
 
-初期版では対応しません。OpenAIは秘密APIキーをブラウザやモバイルアプリなどのクライアント側コードへ露出しないよう案内しています。Keychain／Keystoreは保存時の保護には有効ですが、実行中のキー抽出までは防げないため、将来バックエンド中継方式を用意する場合に再検討します。デスクトップ版のOpenAI機能は変更しません。
+初期版では対応しません。OpenAIは秘密APIキーをブラウザやモバイルアプリなどのクライアント側コードへ露出しないよう案内しています。Android Keystoreは保存時の保護には有効ですが、実行中のキー抽出までは防げないため、将来バックエンド中継方式を用意する場合に再検討します。デスクトップ版のOpenAI機能は変更しません。
 
 ### Edge TTS
 
@@ -43,23 +43,23 @@ APIキー不要の選択肢としてモバイル版でも利用できます。�
 ### その他の差異
 
 - デスクトップ版のGoogleサービスアカウント認証、OpenAI、Edge TTSには影響しません。
-- MP3の保存先は任意のフォルダではなく、OSが管理するアプリ文書領域です。生成後に共有シートからファイルアプリや他アプリへ保存できます。
+- MP3は選択したフォルダへ直接保存できます。出力先を指定しない場合はアプリ専用領域に生成し、共有シートから他アプリへ渡せます。
 - APIキーを安全領域へ保存しても、root化・脱獄、デバッガ接続、実行時フックに対する完全な保護は保証できません。
 
 ## 開発環境の準備
 
-Flutter 3.47以降（Dart 3.13以降）をインストールし、`flutter doctor`のAndroid/iOS要件を満たしてください。iOSのビルドと署名にはmacOSとXcodeが必要です。
+Flutter 3.47以降（Dart 3.13以降）とAndroid SDKをインストールし、`flutter doctor`のAndroid要件を満たしてください。
 
 ```bash
-cd mobile
+cd yomipalette-android
 flutter pub get
 flutter test
 flutter run
 ```
 
-AndroidとiOSのホストプロジェクトはリポジトリに含まれます。APIキーや署名ファイルをGitへコミットしないでください。
+Androidのホストプロジェクトはリポジトリに含まれます。APIキーや署名ファイルをGitへコミットしないでください。
 
-GitHub Actionsは解析、テスト、AndroidデバッグAPK、署名なしiOSビルドを検証します。ストア公開用Android App BundleとiOSアーカイブには、それぞれの開発者アカウントとリポジトリ外で管理する署名情報を別途設定する必要があります。CIのデバッグAPKを一般配布しないでください。
+GitHub Actionsは解析、テスト、AndroidデバッグAPKを検証します。新しい `v*` タグをpushすると、このリポジトリにreleaseモードのAPKを公開します。現在はデバッグ鍵で署名するテスト用ビルドです。本番配布・Google Play公開には正式な署名設定が別途必要です。Appleの開発環境は不要です。
 
 ## YomiPaletteの開発を応援する
 
@@ -73,3 +73,13 @@ YomiPaletteが役に立ったら、開発の継続を応援していただける
 テキスト入りPDFに対応しています。「章・ページごと」ではページ順に `Page 001` などの単位を作り、「文字数ごと」では抽出した全ページの本文を連結して分割します。PDFのしおりによる章分けは行いません。文字のないページ（空白・画像のみ）は省略し、タイトルには元のページ番号を残します。
 
 OCRは未対応です。画像・スキャンのみのPDFからは読み込めず、画像ページとテキストページが混在する場合はテキスト部分だけが対象です。パスワード入力が必要なPDFには対応していません。縦書き・段組み・表・特殊なフォントは、読み順や抽出結果が崩れる場合があります。PDFの文字は端末内で抽出し、音声生成時は選択したTTSプロバイダの通常の動作に従います。
+
+## リポジトリの開発
+
+このリポジトリのルートで `flutter analyze`、`flutter test`、`flutter build apk --release` を実行します。EPUBケースと合成PDF素材は `test/fixtures/` に含まれます。PDF素材は `pypdf` 導入後に `python test/fixtures/pdf/generate.py` で再生成できます。LinuxではPDFiumを使うテストをスキップするため、WindowsまたはmacOSでもテストしてください。
+
+バージョンは `pubspec.yaml` で独立して管理します。互換性のためAndroid applicationIdと内部Dartパッケージ名を維持します。過去の統合Releaseは[デスクトップ側](https://github.com/t-and-i/yomipalette-desktop/releases)、今後のAndroid版は[こちら](https://github.com/t-and-i/yomipalette-android/releases)で管理します。
+
+## ライセンス
+
+[MIT License](LICENSE)で公開しています。Copyright (c) 2026 YuluEthan.

@@ -8,13 +8,13 @@ import 'package:tts_text_mp3_mobile/services/pdf_reader.dart';
 import 'package:tts_text_mp3_mobile/services/text_splitter.dart';
 
 Future<Uint8List> fixture(String name) =>
-    File('../tests/fixtures/pdf/$name').readAsBytes();
+    File('test/fixtures/pdf/$name').readAsBytes();
 
 void main() {
-  // pdfrx bundles PDFium for Android, iOS, macOS, Windows, and web. The Flutter
+  // pdfrx bundles PDFium for Android and supported desktop test hosts. The Flutter
   // Linux test runner does not ship libpdfium.so, so these tests can only run
   // where PDFium is available. CI uses Linux; skip there to keep `flutter test`
-  // green. The release Android and iOS jobs still build the real binaries.
+  // green. The Android release job still builds the real binaries.
   final isLinuxHost = Platform.isLinux;
   final skipReason = 'pdfrx Linux test runner does not bundle PDFium';
 
