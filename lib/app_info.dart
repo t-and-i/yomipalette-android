@@ -1,22 +1,12 @@
 import 'package:url_launcher/url_launcher.dart';
 
-class SupportLink {
-  const SupportLink(this.label, this.url);
+typedef ExternalLinkLauncher = Future<bool> Function(Uri uri);
 
-  final String label;
-  final String url;
-}
+const projectContactUrl =
+    'https://github.com/t-and-i/yomipalette-android/issues';
 
-typedef SupportLauncher = Future<bool> Function(Uri uri);
-
-const supportLinks = [
-  SupportLink('GitHub Sponsors', 'https://github.com/sponsors/tjsongwei'),
-  SupportLink('Buy Me a Coffee', 'https://buymeacoffee.com/tjsongweic'),
-];
-
-Future<bool> openSupportLink(SupportLink link, {SupportLauncher? launcher}) {
+Future<bool> openExternalLink(String url, {ExternalLinkLauncher? launcher}) {
   return (launcher ??
-      (uri) => launchUrl(uri, mode: LaunchMode.externalApplication))(
-    Uri.parse(link.url),
-  );
+      (uri) =>
+          launchUrl(uri, mode: LaunchMode.externalApplication))(Uri.parse(url));
 }

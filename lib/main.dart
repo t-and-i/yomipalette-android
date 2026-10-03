@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'app_info.dart';
+import 'screens/app_information_screen.dart';
 import 'l10n/strings.dart';
 import 'models/chapter.dart';
 import 'providers/azure_provider.dart';
@@ -30,13 +31,13 @@ void main() => runApp(const TtsMobileApp());
 class TtsMobileApp extends StatefulWidget {
   const TtsMobileApp({
     this.previewPlayer,
-    this.supportLauncher,
+    this.externalLinkLauncher,
     this.initialChapters = const [],
     super.key,
   });
 
   final PreviewAudioPlayer? previewPlayer;
-  final SupportLauncher? supportLauncher;
+  final ExternalLinkLauncher? externalLinkLauncher;
   final List<Chapter> initialChapters;
 
   @override
@@ -61,7 +62,7 @@ class _TtsMobileAppState extends State<TtsMobileApp> {
     home: HomeScreen(
       onLocaleChanged: (value) => setState(() => locale = value),
       previewPlayer: widget.previewPlayer,
-      supportLauncher: widget.supportLauncher,
+      externalLinkLauncher: widget.externalLinkLauncher,
       initialChapters: widget.initialChapters,
     ),
   );
@@ -71,13 +72,13 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({
     required this.onLocaleChanged,
     this.previewPlayer,
-    this.supportLauncher,
+    this.externalLinkLauncher,
     this.initialChapters = const [],
     super.key,
   });
   final ValueChanged<Locale> onLocaleChanged;
   final PreviewAudioPlayer? previewPlayer;
-  final SupportLauncher? supportLauncher;
+  final ExternalLinkLauncher? externalLinkLauncher;
   final List<Chapter> initialChapters;
 
   @override
@@ -118,6 +119,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<String> _generatedPaths = [];
   String _status = '';
   String? _appVersion;
+  String? _appBuildNumber;
 
   @override
   void initState() {
@@ -136,64 +138,21 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadAppVersion() async {
     try {
       final info = await PackageInfo.fromPlatform();
-      if (mounted) setState(() => _appVersion = info.version);
+      if (mounted) {
+        setState(() {
+          _appVersion = info.version;
+          _appBuildNumber = info.buildNumber;
+        });
+      }
     } catch (_) {
       // The app remains usable when platform metadata is unavailable.
     }
   }
 
-  Future<void> _openSupport() async {
-    final link = await showModalBottomSheet<SupportLink>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  s.get('supportDialogTitle'),
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                Text(s.get('supportDialogMessage')),
-                const SizedBox(height: 8),
-                for (final link in supportLinks)
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(
-                      link.label == 'Buy Me a Coffee'
-                          ? Icons.local_cafe_outlined
-                          : Icons.favorite_border,
-                    ),
-                    title: Text(link.label),
-                    trailing: const Icon(Icons.open_in_new),
-                    onTap: () => Navigator.pop(context, link),
-                  ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: Text(s.get('close')),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-    if (link == null || !mounted) return;
-    await _openSupportLink(link);
-  }
-
-  Future<void> _openSupportLink(SupportLink link) async {
+  Future<void> _openExternalLink(String url) async {
     var opened = false;
     try {
-      opened = await openSupportLink(link, launcher: widget.supportLauncher);
+      opened = await openExternalLink(url, launcher: widget.externalLinkLauncher);
     } catch (_) {
       // Show a copyable address when the platform cannot open a browser.
     }
@@ -201,19 +160,19 @@ class _HomeScreenState extends State<HomeScreen> {
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(s.get('supportOpenFailedTitle')),
+        title: Text(s.get('externalLinkOpenFailedTitle')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(s.get('supportOpenFailed')),
+            Text(s.get('externalLinkOpenFailed')),
             const SizedBox(height: 8),
-            SelectableText(link.url),
+            SelectableText(url),
           ],
         ),
         actions: [
           TextButton.icon(
-            onPressed: () => Clipboard.setData(ClipboardData(text: link.url)),
+            onPressed: () => Clipboard.setData(ClipboardData(text: url)),
             icon: const Icon(Icons.copy),
             label: Text(s.get('copy')),
           ),
@@ -687,6 +646,17 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: s.get('about'),
+            icon: const Icon(Icons.info_outline),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => AppInformationScreen(
+                version: _appVersion,
+                buildNumber: _appBuildNumber,
+                openProject: () => _openExternalLink(projectContactUrl),
+              ),
+            )),
+          ),
           DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: Localizations.localeOf(context).languageCode,
@@ -706,18 +676,6 @@ class _HomeScreenState extends State<HomeScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: _openSupport,
-              icon: const Icon(Icons.favorite_border, size: 16),
-              label: Text(s.get('support')),
-              style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
-                textStyle: Theme.of(context).textTheme.labelSmall,
-              ),
-            ),
-          ),
           Text(s.get('file'), style: Theme.of(context).textTheme.titleMedium),
           Row(
             children: [
@@ -829,6 +787,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
           ),
           const SizedBox(height: 8),
+          Text(
+            s.get(_providerName == 'device' ? 'deviceDisclosure' : 'cloudDisclosure'),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => const PrivacyScreen(),
+              )),
+              child: Text(s.get('privacy')),
+            ),
+          ),
           if (_providerName == 'device') ...[
             DropdownButtonFormField<String>(
               key: ValueKey('device-engine-$_deviceTtsEngine'),
