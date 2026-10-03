@@ -4,6 +4,20 @@ Turn your digital books into audio, with your choice of voice.
 
 [English](README.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
+## 日本語
+
+YomiPalette Androidは、TXT・EPUB・テキスト入りPDFを読み上げ、MP3に変換するAndroidアプリです。章ごと・指定文字数ごとの分割、音声の試聴、保存先フォルダーの選択、音声ファイルの共有に対応しています。Edge TTS、Azure Speech、Google Cloud TTS、Android端末のTTSエンジンを利用でき、画面は日本語・英語・簡体字中国語に切り替えられます。
+
+使い方、対応形式、制限、開発環境については、[日本語の説明全文](README.ja.md)をご覧ください。
+
+## 简体中文
+
+YomiPalette Android是一款将TXT、EPUB及含文本的PDF朗读并转换为MP3的Android应用。支持按章节或指定字符数拆分、语音试听、选择输出文件夹及分享音频。可使用Edge TTS、Azure Speech、Google Cloud TTS及Android设备上的TTS引擎，界面支持日语、英语和简体中文。
+
+使用方法、支持的格式、功能限制及开发环境，请参阅[简体中文完整说明](README.zh-CN.md)。
+
+## English
+
 Android Flutter client for YomiPalette, maintained in **yomipalette-android**. The Windows/macOS app is maintained in [yomipalette-desktop](https://github.com/t-and-i/yomipalette-desktop). iOS development has ended; this repository targets Android only.
 
 ## Initial scope
