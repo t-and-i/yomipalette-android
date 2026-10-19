@@ -152,7 +152,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _openExternalLink(String url) async {
     var opened = false;
     try {
-      opened = await openExternalLink(url, launcher: widget.externalLinkLauncher);
+      opened = await openExternalLink(
+        url,
+        launcher: widget.externalLinkLauncher,
+      );
     } catch (_) {
       // Show a copyable address when the platform cannot open a browser.
     }
@@ -634,28 +637,20 @@ class _HomeScreenState extends State<HomeScreen> {
     final units = _units;
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(s.get('title')),
-            if (_appVersion != null)
-              Text(
-                'v$_appVersion',
-                style: Theme.of(context).textTheme.labelSmall,
-              ),
-          ],
-        ),
+        title: Text(s.get('title')),
         actions: [
           IconButton(
             tooltip: s.get('about'),
             icon: const Icon(Icons.info_outline),
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => AppInformationScreen(
-                version: _appVersion,
-                buildNumber: _appBuildNumber,
-                openProject: () => _openExternalLink(projectContactUrl),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => AppInformationScreen(
+                  version: _appVersion,
+                  buildNumber: _appBuildNumber,
+                  openProject: () => _openExternalLink(projectContactUrl),
+                ),
               ),
-            )),
+            ),
           ),
           DropdownButtonHideUnderline(
             child: DropdownButton<String>(
@@ -788,15 +783,19 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            s.get(_providerName == 'device' ? 'deviceDisclosure' : 'cloudDisclosure'),
+            s.get(
+              _providerName == 'device'
+                  ? 'deviceDisclosure'
+                  : 'cloudDisclosure',
+            ),
             style: Theme.of(context).textTheme.bodySmall,
           ),
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton(
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                builder: (_) => const PrivacyScreen(),
-              )),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const PrivacyScreen()),
+              ),
               child: Text(s.get('privacy')),
             ),
           ),

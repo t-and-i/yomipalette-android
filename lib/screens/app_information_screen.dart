@@ -27,7 +27,38 @@ class AppInformationScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         children: [
           Text('YomiPalette', style: Theme.of(context).textTheme.headlineSmall),
-          SelectableText(versionLabel),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      s.get('version'),
+                      style: Theme.of(context).textTheme.labelMedium,
+                    ),
+                    SelectableText(versionLabel),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: s.get('copyVersion'),
+                icon: const Icon(Icons.copy_outlined),
+                onPressed: version == null || version!.isEmpty
+                    ? null
+                    : () async {
+                        await Clipboard.setData(
+                          ClipboardData(text: 'YomiPalette $versionLabel'),
+                        );
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(s.get('versionCopied'))),
+                        );
+                      },
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           ListTile(
             leading: const Icon(Icons.privacy_tip_outlined),

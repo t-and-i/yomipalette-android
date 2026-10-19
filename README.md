@@ -62,13 +62,6 @@ Install the Android SDK and satisfy the Android requirements reported by `flutte
 
 GitHub Actions validates analysis, tests, and an Android debug APK. Pushing a new `v*` tag builds a release-mode APK and publishes it to this repository. The current release build uses debug signing and is for testing; production distribution and Google Play require separately configured release signing. No Apple toolchain is required.
 
-## Support YomiPalette
-
-If YomiPalette is useful to you, consider supporting its continued development. Your support helps improve features, fix bugs, and test Windows and Android compatibility. Support is optional and does not change which app features you can use.
-
-- [Support via GitHub Sponsors](https://github.com/sponsors/tjsongwei)
-- [Support via Buy Me a Coffee](https://buymeacoffee.com/tjsongweic)
-
 ## PDF input
 
 PDFs with embedded text are supported. **By chapter / page** creates units such as `Page 001` in physical page order; **By character count** joins all extracted page text before splitting. PDF bookmarks are not used as chapter boundaries. Pages without text (blank or image-only) are skipped, preserving original page numbers in titles.
@@ -84,3 +77,15 @@ Versions are managed independently in `pubspec.yaml`. The Android application ID
 ## License
 
 Released under the [MIT License](LICENSE). Copyright (c) 2026 YuluEthan.
+
+## App information and privacy
+
+Use the information icon in the app bar to view the installed version/build, offline privacy explanation, licenses and GitHub contact link. The privacy explanation is also accessible below the TTS provider selector. A hosted privacy-policy URL for Google Play submission is not configured yet.
+
+## Signed Google Play bundle (local build)
+
+From the repository root, run `powershell -ExecutionPolicy Bypass -File scripts/initialize-play-signing.ps1` once, then `powershell -ExecutionPolicy Bypass -File scripts/build-play.ps1`. The latter builds `build/app/outputs/bundle/release/app-release.aab`, verifies its signature and matches its signer against the saved upload certificate. It does not upload anything.
+
+Signing material is stored outside Git in `%USERPROFILE%/.android/yomipalette-signing/`, restricted to the current Windows user. Back up this folder securely to encrypted storage. `key.properties` contains randomly generated plaintext passwords: never commit or share it or the keystore. Only `upload-certificate.pem` is public. Existing keys are never overwritten. Use `-JavaBin` for a nonstandard Android Studio JBR location, or `-SigningProperties` when building with another UTF-8 properties file (storeFile, storePassword, keyAlias, keyPassword; absolute forward-slash storeFile path). Keep the public certificate beside it.
+
+Ordinary debug runs and release APK builds retain test/debug signing. Release AAB builds require the script's explicit Play signing configuration and fail without it. No CI secrets or publication settings are changed. Google Play App Signing is configured separately; a Google-managed distribution key differs from this upload key and from existing debug APK signatures, so those APKs cannot update directly to that Play build. Keep the app ID, and increment versionCode for subsequent Play uploads. An AAB is not directly installable like an APK. Privacy-policy hosting, Play declarations, testing and publication remain separate tasks.

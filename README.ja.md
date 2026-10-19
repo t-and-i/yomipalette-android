@@ -61,13 +61,6 @@ Androidのホストプロジェクトはリポジトリに含まれます。API�
 
 GitHub Actionsは解析、テスト、AndroidデバッグAPKを検証します。新しい `v*` タグをpushすると、このリポジトリにreleaseモードのAPKを公開します。現在はデバッグ鍵で署名するテスト用ビルドです。本番配布・Google Play公開には正式な署名設定が別途必要です。Appleの開発環境は不要です。
 
-## YomiPaletteの開発を応援する
-
-YomiPaletteが役に立ったら、開発の継続を応援していただけるとうれしいです。いただいた支援は、機能改善・不具合修正・Windows／Androidでの動作検証に役立てます。支援は任意で、支援の有無によって利用できる機能は変わりません。
-
-- [GitHub Sponsorsで開発を応援する](https://github.com/sponsors/tjsongwei)
-- [Buy Me a Coffeeで開発を応援する](https://buymeacoffee.com/tjsongweic)
-
 ## PDFの読み込み
 
 テキスト入りPDFに対応しています。「章・ページごと」ではページ順に `Page 001` などの単位を作り、「文字数ごと」では抽出した全ページの本文を連結して分割します。PDFのしおりによる章分けは行いません。文字のないページ（空白・画像のみ）は省略し、タイトルには元のページ番号を残します。
@@ -83,3 +76,23 @@ OCRは未対応です。画像・スキャンのみのPDFからは読み込め�
 ## ライセンス
 
 [MIT License](LICENSE)で公開しています。Copyright (c) 2026 YuluEthan.
+
+## アプリ情報とプライバシー
+
+画面上部の情報アイコンから、インストール済みのバージョン・ビルド番号、オフラインで読めるプライバシー説明、ライセンス、GitHubのお問い合わせ先を確認できます。TTS選択欄からもプライバシー説明を開けます。Google Play申請用のプライバシーポリシー公開URLは未設定です。
+
+## Google Play向けAAB（ローカル作成）
+
+PowerShellをリポジトリのルートで開きます。初回のみ `powershell -ExecutionPolicy Bypass -File scripts/initialize-play-signing.ps1` を実行してアップロード鍵を作成します。既存の鍵は上書きしません。
+
+以後は `powershell -ExecutionPolicy Bypass -File scripts/build-play.ps1` で署名済みAABを作成します。生成先は `build/app/outputs/bundle/release/app-release.aab`。署名と保存済みの公開証明書との一致も確認します。アップロードは行いません。
+
+鍵・パスワード入りの設定ファイル・公開証明書は `%USERPROFILE%/.android/yomipalette-signing/` に保存されます。このフォルダーを暗号化した外部媒体などへバックアップしてください。`key.properties` は平文のパスワードを含むため、鍵とともにGitへ追加したり共有したりしないでください。パスワードは生成時にランダム作成され、画面には表示しません。公開証明書 `upload-certificate.pem` だけはPlay Consoleへの登録に利用できます。
+
+スクリプトはAndroid Studioの標準インストール先のJBRを使用します。別の場所では `-JavaBin`、既存の鍵を利用する場合はビルド時に `-SigningProperties` で変更できます。設定ファイルはUTF-8、`storeFile` は絶対パスと `/` 区切りを使い、`storePassword`、`keyAlias`、`keyPassword` を指定します。同じフォルダーに公開証明書を置いてください。
+
+通常のデバッグ実行と `flutter build apk --release` はテスト用デバッグ署名のままです。通常の `flutter build appbundle --release` は誤提出防止のため拒否します。専用スクリプトはGradleプロパティ `PLAY_RELEASE=true` と `PLAY_SIGNING_PROPERTIES` を実行中だけ渡します。GitHub Actionsには秘密鍵を登録していません。
+
+初回提出時はPlay App Signingを設定します。Googleが配信用の署名鍵を管理する場合、このアップロード鍵とは別の鍵で配布APKが署名されます。その場合、GitHubのテストAPKや手元でアップロード鍵で署名したAPKからPlay版への上書き更新はできません。アンインストール前に必要な音声ファイルを保存してください。アプリIDは変更しません。バージョンは `pubspec.yaml` で管理し、提出済みのversionCodeを再利用しないでください。
+
+この作業は提出用ファイルの準備です。プライバシーポリシー公開、データセーフティ等の申告、テスト、審査・公開は別途必要です。AABはAPKのように端末へ直接インストールできません。

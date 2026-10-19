@@ -10,7 +10,6 @@ void main() {
     testWidgets('About and offline privacy in ${locale.languageCode}', (
       tester,
     ) async {
-
       tester.view.physicalSize = const Size(360, 640);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
@@ -36,6 +35,22 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('0.2.0 (8)'), findsOneWidget);
+      expect(find.text(s.get('version')), findsOneWidget);
+      String? copiedVersion;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+            if (call.method == 'Clipboard.setData') {
+              copiedVersion = (call.arguments as Map)['text'] as String;
+            }
+            return null;
+          });
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null),
+      );
+      await tester.tap(find.byTooltip(s.get('copyVersion')));
+      await tester.pump();
+      expect(copiedVersion, 'YomiPalette 0.2.0 (8)');
       await tester.tap(find.text(s.get('privacy')));
       await tester.pumpAndSettle();
       expect(find.text(s.get('privacyDocuments')), findsOneWidget);

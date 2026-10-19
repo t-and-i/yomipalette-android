@@ -32,13 +32,6 @@ TXT字符编码默认为“自动检测”。如果检测结果不正确，可�
 
 这些限制仅适用于移动版，不影响桌面版。开发环境和完整安全说明请参阅[日语README](README.ja.md)。
 
-## 支持 YomiPalette 开发
-
-如果 YomiPalette 对您有帮助，欢迎支持项目的持续开发。您的支持将用于功能改进、问题修复以及 Windows 和 Android 的兼容性测试。支持完全自愿，不影响您可以使用的应用功能。
-
-- [通过 GitHub Sponsors 支持开发](https://github.com/sponsors/tjsongwei)
-- [通过 Buy Me a Coffee 支持开发](https://buymeacoffee.com/tjsongweic)
-
 ## PDF导入
 
 支持含文本的PDF。“按章节／页”按原始页序生成 `Page 001` 等单元；“按字符数”先合并所有提取的页面文本再分割。不根据PDF书签划分章节。无文本的页面（空白或纯图片）会被跳过，标题保留原始页码。
@@ -65,3 +58,15 @@ GitHub Actions执行分析、测试和Android调试APK构建。推送新的 `v*`
 ## 许可证
 
 采用 [MIT License](LICENSE)。Copyright (c) 2026 YuluEthan.
+
+## 应用信息与隐私
+
+点击顶部的信息图标，可查看已安装版本及构建编号、离线隐私说明、许可证和GitHub联系链接。TTS选择栏下方也可打开隐私说明。尚未配置用于Google Play提交的公开隐私政策网址。
+
+## Google Play签名AAB（本地构建）
+
+在仓库根目录的PowerShell中，首次运行 `powershell -ExecutionPolicy Bypass -File scripts/initialize-play-signing.ps1` 创建上传密钥；之后运行 `powershell -ExecutionPolicy Bypass -File scripts/build-play.ps1`。输出为 `build/app/outputs/bundle/release/app-release.aab`，脚本验证签名及其与保存的公开证书的一致性，不会上传。
+
+密钥、含随机生成明文密码的 `key.properties` 和公开证书位于Git之外的 `%USERPROFILE%/.android/yomipalette-signing/`，仅当前Windows用户有访问权限。请将整个目录备份到加密存储，切勿提交或分享密钥和密码文件。只有 `upload-certificate.pem` 是公开证书。脚本不会覆盖已有目录。可用 `-JavaBin` 指定其他JBR路径，构建时可用 `-SigningProperties` 指定其他UTF-8配置文件（storeFile、storePassword、keyAlias、keyPassword；storeFile使用绝对路径和正斜杠），公开证书须放在同一目录。
+
+普通调试运行及release APK仍使用测试用调试签名。release AAB必须通过专用脚本显式启用Play签名，缺少密钥时不会回退。尚未配置CI密钥或上传发布。Play App Signing需另行设置；Google管理的分发密钥与上传密钥、调试签名不同，因此测试APK不能直接覆盖更新为该Play版本。保持应用ID不变，后续提交时递增versionCode。AAB不能像APK一样直接安装。隐私政策网址、Play申报、测试及发布仍需另行完成。

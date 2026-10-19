@@ -10,6 +10,9 @@ class AppStrings {
     'en': {
       "about": "About this app",
       "versionUnavailable": "Version unavailable",
+      "version": "Version",
+      "copyVersion": "Copy version information",
+      "versionCopied": "Version information copied",
       "privacy": "Privacy",
       "licenses": "Open-source licenses",
       "projectContact": "Project / contact (GitHub)",
@@ -26,7 +29,8 @@ class AppStrings {
       "privacyExternal": "This version has no advertising or analytics SDK. Project links open external websites with their own privacy policies. Sharing sends selected audio to the app or service you choose. Do not post private documents, API keys or personal information in public GitHub issues.",
       "privacyIntro": "YomiPalette does not operate its own document-upload server. The following describes this version; it does not promise that third-party services retain no data.",
       "cloudDisclosure": "Cloud TTS sends reading text to the selected service. Usage charges may apply.",
-      "deviceDisclosure": "The selected TTS engine may use a network connection.",
+      "deviceDisclosure":
+          "The selected TTS engine may use a network connection.",
 
       'pdfNoText': 'No embedded text was found in this PDF. Image-only or scanned pages require OCR, which is not supported.',
       'pdfPassword': 'This PDF requires a password. Open and save an unprotected copy before importing it.',
@@ -110,6 +114,9 @@ class AppStrings {
     'ja': {
       "about": "このアプリについて",
       "versionUnavailable": "バージョンを取得できません",
+      "version": "バージョン",
+      "copyVersion": "バージョン情報をコピー",
+      "versionCopied": "バージョン情報をコピーしました",
       "privacy": "プライバシー",
       "licenses": "オープンソースライセンス",
       "projectContact": "プロジェクト・お問い合わせ（GitHub）",
@@ -208,6 +215,9 @@ class AppStrings {
     'zh': {
       "about": "关于本应用",
       "versionUnavailable": "无法获取版本",
+      "version": "版本",
+      "copyVersion": "复制版本信息",
+      "versionCopied": "已复制版本信息",
       "privacy": "隐私说明",
       "licenses": "开源许可证",
       "projectContact": "项目与联系（GitHub）",
@@ -215,7 +225,8 @@ class AppStrings {
       "privacyDocumentsTitle": "文档与语音合成",
       "privacyDocuments": "TXT、EPUB和PDF文本在设备上提取。试听和生成MP3时，Edge TTS将朗读文本发送给Microsoft，Azure Speech发送给Microsoft Azure，Google Cloud TTS发送给Google Cloud。服务还会收到IP地址等连接信息。适用各服务的条款和隐私政策。Azure和Google Cloud可能向您的账户收取使用费。Edge TTS使用非官方端点，可能停止工作。",
       "privacyDeviceTitle": "设备TTS",
-      "privacyDevice": "文本会传递给您选择的Android TTS引擎。根据引擎和语音，可能需要联网或下载语音数据。设备TTS不一定完全离线。",
+      "privacyDevice":
+          "文本会传递给您选择的Android TTS引擎。根据引擎和语音，可能需要联网或下载语音数据。设备TTS不一定完全离线。",
       "privacyCredentialsTitle": "凭据与设置",
       "privacyCredentials": "API密钥和Azure区域可保存在本设备的加密存储中。关闭保存时，凭据仅在应用会话期间保留。可在各提供商下删除已保存的凭据。语音、输出文件夹访问权限等设置保存在本地。",
       "privacyAudioTitle": "音频与删除",

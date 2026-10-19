@@ -1,7 +1,35 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// Play builds must opt in explicitly; GitHub test APKs keep debug signing.
+val playRelease = providers.gradleProperty("PLAY_RELEASE").orNull == "true"
+val playSigning = Properties()
+gradle.taskGraph.whenReady {
+    if (!playRelease && allTasks.any { it.project == project && it.name == "bundleRelease" }) {
+        throw GradleException("Release AABs require the upload key. Use scripts/build-play.ps1.")
+    }
+}
+if (playRelease) {
+    val propertiesPath = providers.gradleProperty("PLAY_SIGNING_PROPERTIES").orNull
+        ?: throw GradleException("Play signing is not configured. Use scripts/build-play.ps1.")
+    val propertiesFile = file(propertiesPath)
+    if (!propertiesFile.isFile) {
+        throw GradleException("Play signing properties file does not exist.")
+    }
+    propertiesFile.reader(Charsets.UTF_8).use { playSigning.load(it) }
+    for (name in listOf("storeFile", "storePassword", "keyAlias", "keyPassword")) {
+        if (playSigning.getProperty(name).isNullOrBlank()) {
+            throw GradleException("Missing Play signing property: $name")
+        }
+    }
+    if (!file(playSigning.getProperty("storeFile")).isFile) {
+        throw GradleException("Play upload keystore does not exist.")
+    }
 }
 
 android {
@@ -29,11 +57,20 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (playRelease) {
+            create("playUpload") {
+                storeFile = file(playSigning.getProperty("storeFile"))
+                storePassword = playSigning.getProperty("storePassword")
+                keyAlias = playSigning.getProperty("keyAlias")
+                keyPassword = playSigning.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (playRelease) "playUpload" else "debug")
         }
     }
 }

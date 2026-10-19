@@ -16,7 +16,7 @@
 
 ## Credentials and releases
 - Never commit API keys, credentials, local.properties, signing keys, or build outputs. Keep the Android secure-storage behavior and provider contracts.
-- `LICENSE` and `.github/FUNDING.yml` apply to this project; retain GitHub Sponsors before Buy Me a Coffee.
+- `LICENSE` applies to this project. Do not add donation or sponsorship solicitations to the Android app or its repository documentation.
 - `.github/workflows/android.yml` validates pushes/PRs. `.github/workflows/release.yml` builds APKs and publishes only for new `v*` tags.
-- Current release-mode APKs use debug signing. Production/Play signing is separate work.
+- Ordinary release-mode APKs use debug signing. Play AABs use scripts/build-play.ps1 with an external upload key; no automatic upload. Never fall back to debug signing for a Play AAB.
 - Do not create tags, publish releases, or change signing without authorization.
