@@ -71,8 +71,10 @@ void main() {
       expect(pcm.channels, 1);
       expect(pcm.duration.inMilliseconds, greaterThan(650));
     },
-    skip: Platform.isWindows
-        ? 'Native LAME DLL is not loaded by flutter test on Windows.'
+    // LAME is bundled with the Android APK, not with host-side flutter test.
+    // Validate native encoding on a device with an Android integration test.
+    skip: !Platform.isAndroid
+        ? 'Native MP3 encoder is packaged with Android; not available in desktop test runners.'
         : null,
   );
 
