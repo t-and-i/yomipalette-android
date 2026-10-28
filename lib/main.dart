@@ -18,6 +18,7 @@ import 'providers/device_tts_provider.dart';
 import 'providers/edge_provider.dart';
 import 'providers/google_provider.dart';
 import 'providers/tts_provider.dart';
+import 'services/ad_banner.dart';
 import 'services/audio_generator.dart';
 import 'services/credential_store.dart';
 import 'services/document_reader.dart';
@@ -46,6 +47,38 @@ class TtsMobileApp extends StatefulWidget {
 
 class _TtsMobileAppState extends State<TtsMobileApp> {
   Locale? locale;
+  ThemeMode _themeMode = ThemeMode.system;
+  bool _themeChangedDuringRestore = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_restoreThemeMode());
+  }
+
+  Future<void> _restoreThemeMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('theme_mode');
+    if (!mounted || _themeChangedDuringRestore) return;
+    setState(
+      () => _themeMode = switch (saved) {
+        'light' => ThemeMode.light,
+        'dark' => ThemeMode.dark,
+        _ => ThemeMode.system,
+      },
+    );
+  }
+
+  void _changeThemeMode(ThemeMode mode) {
+    _themeChangedDuringRestore = true;
+    setState(() => _themeMode = mode);
+    unawaited(_saveThemeMode(mode));
+  }
+
+  Future<void> _saveThemeMode(ThemeMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('theme_mode', mode.name);
+  }
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -58,9 +91,25 @@ class _TtsMobileAppState extends State<TtsMobileApp> {
       GlobalCupertinoLocalizations.delegate,
     ],
     title: 'YomiPalette',
-    theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
+    theme: ThemeData(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: Colors.indigo,
+        brightness: Brightness.light,
+      ),
+      useMaterial3: true,
+    ),
+    darkTheme: ThemeData(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: Colors.indigo,
+        brightness: Brightness.dark,
+      ),
+      useMaterial3: true,
+    ),
+    themeMode: _themeMode,
     home: HomeScreen(
       onLocaleChanged: (value) => setState(() => locale = value),
+      themeMode: _themeMode,
+      onThemeModeChanged: _changeThemeMode,
       previewPlayer: widget.previewPlayer,
       externalLinkLauncher: widget.externalLinkLauncher,
       initialChapters: widget.initialChapters,
@@ -71,12 +120,16 @@ class _TtsMobileAppState extends State<TtsMobileApp> {
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
     required this.onLocaleChanged,
+    this.themeMode = ThemeMode.system,
+    this.onThemeModeChanged,
     this.previewPlayer,
     this.externalLinkLauncher,
     this.initialChapters = const [],
     super.key,
   });
   final ValueChanged<Locale> onLocaleChanged;
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode>? onThemeModeChanged;
   final PreviewAudioPlayer? previewPlayer;
   final ExternalLinkLauncher? externalLinkLauncher;
   final List<Chapter> initialChapters;
@@ -100,6 +153,9 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _busy = false;
   bool _isPreviewPlaying = false;
   bool _showLimitations = true;
+  bool _ttsAutoSplit = true;
+  bool _ttsAutoRetry = true;
+  bool _ttsShowProgress = true;
   double _ratePercent = 0;
   double _volumePercent = 0;
   double _pitchHz = 0;
@@ -235,6 +291,9 @@ class _HomeScreenState extends State<HomeScreen> {
       _splitByChars = prefs.getBool('split_by_chars') ?? false;
       _charsController.text = (prefs.getInt('max_chars') ?? 5000).toString();
       _showLimitations = prefs.getBool('show_mobile_limitations') ?? true;
+      _ttsAutoSplit = prefs.getBool('tts_auto_split') ?? true;
+      _ttsAutoRetry = prefs.getBool('tts_auto_retry') ?? true;
+      _ttsShowProgress = prefs.getBool('tts_show_progress') ?? true;
       _ratePercent = prefs.getDouble('rate_percent') ?? 0;
       _volumePercent = prefs.getDouble('volume_percent') ?? 0;
       _pitchHz = prefs.getDouble('pitch_hz') ?? 0;
@@ -459,12 +518,16 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       final unit = units[(_selectedIndex ?? 0).clamp(0, units.length - 1)];
       final provider = await _provider();
-      final bytes = await provider.synthesize(
+      final bytes = await AudioGenerator.synthesizeLong(
+        provider,
         previewText(unit.text),
         voice.name,
         rate: 1 + _ratePercent / 100,
         volume: _volumePercent,
         pitch: _pitchHz,
+        autoSplit: _providerName != 'google' || _ttsAutoSplit,
+        retryLongSentences: _ttsAutoRetry,
+        onChunkProgress: _updatePreviewChunkProgress,
       );
       final file = await AudioGenerator.writeTemporary(
         bytes,
@@ -549,6 +612,17 @@ class _HomeScreenState extends State<HomeScreen> {
         rate: 1 + _ratePercent / 100,
         volume: _volumePercent,
         pitch: _pitchHz,
+        autoSplit: _providerName != 'google' || _ttsAutoSplit,
+        retryLongSentences: _ttsAutoRetry,
+        onChunkProgress: (unit, unitTotal, chunk, chunkTotal, retrying) {
+          if (!mounted || !_ttsShowProgress) return;
+          setState(
+            () => _status =
+                '${s.get('unitProgress')} $unit/$unitTotal — '
+                '${s.get(retrying ? 'ttsRetrying' : 'ttsChunkProgress')} '
+                '$chunk/$chunkTotal',
+          );
+        },
         onProgress: (current, total) {
           if (mounted) setState(() => _status = '$current / $total');
         },
@@ -601,6 +675,40 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _updatePreviewChunkProgress(int current, int total, bool retrying) {
+    if (!mounted || !_ttsShowProgress) return;
+    setState(
+      () => _status =
+          '${s.get(retrying ? 'ttsRetrying' : 'ttsChunkProgress')} '
+          '$current/$total',
+    );
+  }
+
+  void _resetAudioAdjustments() {
+    if (_busy) return;
+    setState(() {
+      _ratePercent = 0;
+      _volumePercent = 0;
+      _pitchHz = 0;
+      _resetGeneration();
+    });
+    unawaited(_saveAudioAdjustments());
+  }
+
+  Future<void> _saveAudioAdjustments() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('rate_percent', _ratePercent);
+    await prefs.setDouble('volume_percent', _volumePercent);
+    await prefs.setDouble('pitch_hz', _pitchHz);
+  }
+
+  Future<void> _saveTtsOptions() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('tts_auto_split', _ttsAutoSplit);
+    await prefs.setBool('tts_auto_retry', _ttsAutoRetry);
+    await prefs.setBool('tts_show_progress', _ttsShowProgress);
+  }
+
   Future<void> _run(Future<void> Function() action) async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -609,6 +717,9 @@ class _HomeScreenState extends State<HomeScreen> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('provider', _providerName);
       await prefs.setBool('split_by_chars', _splitByChars);
+      await prefs.setBool('tts_auto_split', _ttsAutoSplit);
+      await prefs.setBool('tts_auto_retry', _ttsAutoRetry);
+      await prefs.setBool('tts_show_progress', _ttsShowProgress);
       await prefs.setInt(
         'max_chars',
         int.tryParse(_charsController.text) ?? 5000,
@@ -947,9 +1058,20 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Text(s.get('voiceNotLoaded')),
             ),
           const SizedBox(height: 12),
-          Text(
-            s.get('audioAdjustments'),
-            style: Theme.of(context).textTheme.titleMedium,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  s.get('audioAdjustments'),
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _busy ? null : _resetAudioAdjustments,
+                icon: const Icon(Icons.restart_alt),
+                label: Text(s.get('resetAudio')),
+              ),
+            ],
           ),
           _AudioSlider(
             label: s.get('rate'),
@@ -980,6 +1102,88 @@ class _HomeScreenState extends State<HomeScreen> {
               _pitchHz = value;
               _resetGeneration();
             }),
+          ),
+          if (_providerName == 'google') ...[
+            const SizedBox(height: 12),
+            Text(
+              s.get('ttsLongText'),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(s.get('ttsAutoSplit')),
+              value: _ttsAutoSplit,
+              onChanged: _busy
+                  ? null
+                  : (value) {
+                      setState(() {
+                        _ttsAutoSplit = value;
+                        _resetGeneration();
+                      });
+                      unawaited(_saveTtsOptions());
+                    },
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(s.get('ttsAutoRetry')),
+              value: _ttsAutoRetry,
+              onChanged: _busy
+                  ? null
+                  : (value) {
+                      setState(() {
+                        _ttsAutoRetry = value;
+                        _resetGeneration();
+                      });
+                      unawaited(_saveTtsOptions());
+                    },
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(s.get('ttsShowProgress')),
+              value: _ttsShowProgress,
+              onChanged: _busy
+                  ? null
+                  : (value) {
+                      setState(() => _ttsShowProgress = value);
+                      unawaited(_saveTtsOptions());
+                    },
+            ),
+            if (_voice?.name.toLowerCase().contains('-chirp3-hd-') ?? false)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  s.get('ttsChirpLimited'),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+          ],
+          const Divider(height: 32),
+          Text(
+            s.get('appearance'),
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          SegmentedButton<ThemeMode>(
+            segments: [
+              ButtonSegment(
+                value: ThemeMode.system,
+                icon: const Icon(Icons.brightness_auto_outlined),
+                label: Text(s.get('themeSystem')),
+              ),
+              ButtonSegment(
+                value: ThemeMode.light,
+                icon: const Icon(Icons.light_mode_outlined),
+                label: Text(s.get('themeLight')),
+              ),
+              ButtonSegment(
+                value: ThemeMode.dark,
+                icon: const Icon(Icons.dark_mode_outlined),
+                label: Text(s.get('themeDark')),
+              ),
+            ],
+            selected: {widget.themeMode},
+            onSelectionChanged: (values) =>
+                widget.onThemeModeChanged?.call(values.first),
           ),
           const SizedBox(height: 12),
           Row(
@@ -1074,37 +1278,61 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
         ],
       ),
-      bottomNavigationBar: SafeArea(
-        minimum: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-        child: Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _isPreviewPlaying
-                    ? _stopPreview
-                    : (_busy ? null : _preview),
-                icon: Icon(_isPreviewPlaying ? Icons.stop : Icons.play_arrow),
-                label: Text(
-                  s.get(_isPreviewPlaying ? 'stopPreview' : 'preview'),
-                ),
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_busy && _ttsShowProgress && _status.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const LinearProgressIndicator(minHeight: 2),
+                  Text(
+                    _status,
+                    maxLines: 2,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
               ),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: _busy || _isPreviewPlaying
-                    ? null
-                    : () => _generate(resume: _resumeIndex != null),
-                icon: const Icon(Icons.download),
-                label: Text(
-                  _resumeIndex == null
-                      ? s.get('generate')
-                      : s.get('resumeGenerate'),
+          const YomiPaletteBanner(),
+          SafeArea(
+            minimum: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _isPreviewPlaying
+                        ? _stopPreview
+                        : (_busy ? null : _preview),
+                    icon: Icon(
+                      _isPreviewPlaying ? Icons.stop : Icons.play_arrow,
+                    ),
+                    label: Text(
+                      s.get(_isPreviewPlaying ? 'stopPreview' : 'preview'),
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _busy || _isPreviewPlaying
+                        ? null
+                        : () => _generate(resume: _resumeIndex != null),
+                    icon: const Icon(Icons.download),
+                    label: Text(
+                      _resumeIndex == null
+                          ? s.get('generate')
+                          : s.get('resumeGenerate'),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

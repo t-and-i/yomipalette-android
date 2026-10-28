@@ -1,12 +1,15 @@
 import 'dart:io';
-import 'dart:math' as math;
+// Chunking and retry logic live in tts_chunking.dart.
 import 'dart:typed_data';
 
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
 import '../models/chapter.dart';
+import '../providers/google_provider.dart';
 import '../providers/tts_provider.dart';
+import 'mp3_joiner.dart';
+import 'tts_chunking.dart';
 
 class AudioGenerator {
   static const providerChunkSize = 1800;
@@ -18,21 +21,74 @@ class AudioGenerator {
     double rate = 1,
     double volume = 0,
     double pitch = 0,
+    bool autoSplit = true,
+    bool retryLongSentences = true,
+    void Function(int completed, int total, bool retrying)? onChunkProgress,
+    Future<Uint8List> Function(List<Uint8List>)? mp3Joiner,
   }) async {
-    final builder = BytesBuilder(copy: false);
-    var offset = 0;
-    while (offset < text.length) {
-      final end = math.min(offset + providerChunkSize, text.length);
-      builder.add(await provider.synthesize(
-        text.substring(offset, end),
-        voice,
-        rate: rate,
-        volume: volume,
-        pitch: pitch,
-      ));
-      offset = end;
+    if (text.isEmpty) return Uint8List(0);
+    final google = provider is GoogleProvider;
+    final policy = TtsChunkPolicy.forVoice(google ? 'google' : 'other', voice);
+    final chunks = autoSplit ? splitTtsText(text, policy) : [text];
+    final audioClips = <Uint8List>[];
+    var total = chunks.length;
+    var completed = 0;
+    var retries = 0;
+    const maxRetryRequests = 32;
+
+    Future<void> synthesizeChunk(
+      String chunk,
+      TtsChunkPolicy limit,
+      int depth,
+    ) async {
+      try {
+        final bytes = await provider.synthesize(
+          chunk,
+          voice,
+          rate: rate,
+          volume: volume,
+          pitch: pitch,
+        );
+        audioClips.add(bytes);
+        completed++;
+        onChunkProgress?.call(completed, total, false);
+      } catch (error) {
+        if (!google ||
+            !retryLongSentences ||
+            !isSentenceTooLongError(error) ||
+            depth >= 5 ||
+            retries >= maxRetryRequests ||
+            chunk.runes.length <= 12) {
+          throw TtsProviderException(
+            'Audio segment ${completed + 1}/$total failed: $error',
+          );
+        }
+        final smaller = limit.smaller();
+        final pieces = splitTtsText(chunk, smaller);
+        if (pieces.length < 2) rethrow;
+        retries++;
+        total += pieces.length - 1;
+        onChunkProgress?.call(completed, total, true);
+        for (final part in pieces) {
+          await synthesizeChunk(part, smaller, depth + 1);
+        }
+      }
     }
-    return builder.takeBytes();
+
+    for (final chunk in chunks) {
+      await synthesizeChunk(chunk, policy, 0);
+    }
+    // For Google, decode to PCM and re-encode one continuous MP3 stream.
+    // Other providers retain their legacy byte-stream behavior.
+    if (google && audioClips.length > 1) {
+      return (mp3Joiner ?? Mp3Joiner.join)(audioClips);
+    }
+    if (audioClips.length == 1) return audioClips.single;
+    final result = BytesBuilder(copy: false);
+    for (final clip in audioClips) {
+      result.add(clip);
+    }
+    return result.takeBytes();
   }
 
   static Future<String> writeTemporary(Uint8List bytes, String name) async {
@@ -53,6 +109,16 @@ class AudioGenerator {
     double rate = 1,
     double volume = 0,
     double pitch = 0,
+    bool autoSplit = true,
+    bool retryLongSentences = true,
+    void Function(
+      int unit,
+      int unitTotal,
+      int chunk,
+      int chunkTotal,
+      bool retrying,
+    )?
+    onChunkProgress,
     void Function(int current, int total)? onProgress,
     void Function(String path, int current, int total)? onFileGenerated,
   }) async {
@@ -60,13 +126,15 @@ class AudioGenerator {
       throw RangeError.range(startIndex, 0, units.length, 'startIndex');
     }
     final output = outputDirectory == null && fileWriter == null
-        ? Directory(path.join(
-            (await getApplicationDocumentsDirectory()).path,
-            'YomiPalette',
-          ))
+        ? Directory(
+            path.join(
+              (await getApplicationDocumentsDirectory()).path,
+              'YomiPalette',
+            ),
+          )
         : outputDirectory == null
-            ? null
-            : Directory(outputDirectory);
+        ? null
+        : Directory(outputDirectory);
     await output?.create(recursive: true);
     final paths = List<String>.from(existingPaths);
     for (var index = startIndex; index < units.length; index++) {
@@ -78,9 +146,20 @@ class AudioGenerator {
         rate: rate,
         volume: volume,
         pitch: pitch,
+        autoSplit: autoSplit,
+        retryLongSentences: retryLongSentences,
+        onChunkProgress: (current, total, retrying) => onChunkProgress?.call(
+          index + 1,
+          units.length,
+          current,
+          total,
+          retrying,
+        ),
       );
-      final safeTitle =
-          unit.title.replaceAll(RegExp(r'[\\/:*?"<>|\r\n\t]'), '_');
+      final safeTitle = unit.title.replaceAll(
+        RegExp(r'[\\/:*?"<>|\r\n\t]'),
+        '_',
+      );
       final filename =
           '${unit.index.toString().padLeft(3, '0')}_${safeTitle.isEmpty ? 'untitled' : safeTitle}.mp3';
       final savedPath = fileWriter == null
@@ -107,12 +186,16 @@ class AudioGenerator {
     final directory = Directory(directoryPath);
     if (!await directory.exists()) {
       throw FileSystemException(
-          'The selected folder does not exist.', directoryPath);
+        'The selected folder does not exist.',
+        directoryPath,
+      );
     }
-    final probe = File(path.join(
-      directory.path,
-      '.tts-text-mp3-write-test-${DateTime.now().microsecondsSinceEpoch}',
-    ));
+    final probe = File(
+      path.join(
+        directory.path,
+        '.tts-text-mp3-write-test-${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    );
     try {
       await probe.writeAsString('write test', flush: true);
     } on FileSystemException catch (error) {

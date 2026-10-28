@@ -18,7 +18,7 @@ dependencies:
   xml: ^6.6.1
   cupertino_icons: ^1.0.8
   file_picker: ^10.0.0
-  flutter_edge_tts: ^0.0.2
+  flutter_edge_tts: 0.0.3
   flutter_lame: ^1.0.3
   flutter_secure_storage: ^9.2.4
   http: ^1.3.0
@@ -30,6 +30,12 @@ dependencies:
   package_info_plus: ^9.0.1
   url_launcher: ^6.3.2
   pdfrx: 2.6.1
+  google_mobile_ads: ^9.2.0
+  audio_decode: 1.3.3
+
+dependency_overrides:
+  # Keep the KGP-compatible Android implementation until the other plugins migrate.
+  shared_preferences_android: 2.4.23
 
 dev_dependencies:
   flutter_test:
