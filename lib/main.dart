@@ -19,6 +19,7 @@ import 'providers/edge_provider.dart';
 import 'providers/google_provider.dart';
 import 'providers/tts_provider.dart';
 import 'services/ad_banner.dart';
+import 'services/ad_free_purchase.dart';
 import 'services/audio_generator.dart';
 import 'services/credential_store.dart';
 import 'services/document_reader.dart';
@@ -49,11 +50,28 @@ class _TtsMobileAppState extends State<TtsMobileApp> {
   Locale? locale;
   ThemeMode _themeMode = ThemeMode.system;
   bool _themeChangedDuringRestore = false;
+  late final AdFreePurchaseController _adFreeController;
 
   @override
   void initState() {
     super.initState();
+    _adFreeController = AdFreePurchaseController();
+    _adFreeController.addListener(_onPurchaseChanged);
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      unawaited(_adFreeController.initialize());
+    }
     unawaited(_restoreThemeMode());
+  }
+
+  void _onPurchaseChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _adFreeController.removeListener(_onPurchaseChanged);
+    _adFreeController.dispose();
+    super.dispose();
   }
 
   Future<void> _restoreThemeMode() async {
@@ -110,6 +128,7 @@ class _TtsMobileAppState extends State<TtsMobileApp> {
       onLocaleChanged: (value) => setState(() => locale = value),
       themeMode: _themeMode,
       onThemeModeChanged: _changeThemeMode,
+      adFreeController: _adFreeController,
       previewPlayer: widget.previewPlayer,
       externalLinkLauncher: widget.externalLinkLauncher,
       initialChapters: widget.initialChapters,
@@ -122,6 +141,7 @@ class HomeScreen extends StatefulWidget {
     required this.onLocaleChanged,
     this.themeMode = ThemeMode.system,
     this.onThemeModeChanged,
+    this.adFreeController,
     this.previewPlayer,
     this.externalLinkLauncher,
     this.initialChapters = const [],
@@ -130,6 +150,7 @@ class HomeScreen extends StatefulWidget {
   final ValueChanged<Locale> onLocaleChanged;
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode>? onThemeModeChanged;
+  final AdFreePurchaseController? adFreeController;
   final PreviewAudioPlayer? previewPlayer;
   final ExternalLinkLauncher? externalLinkLauncher;
   final List<Chapter> initialChapters;
@@ -743,6 +764,56 @@ class _HomeScreenState extends State<HomeScreen> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Widget _buildAdFreeSection() {
+    final purchase = widget.adFreeController!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Divider(height: 32),
+        Text(
+          s.get('adFreeTitle'),
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 6),
+        if (purchase.isAdFree)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.verified_outlined),
+            title: Text(s.get('adFreeActive')),
+          )
+        else ...[
+          Text(
+            s.get('adFreeDescription'),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            onPressed: purchase.canBuy ? purchase.buy : null,
+            icon: const Icon(Icons.do_not_disturb_on_outlined),
+            label: Text(
+              purchase.product == null
+                  ? s.get('adFreePurchase')
+                  : '${s.get('adFreePurchase')} · ${purchase.product!.price}',
+            ),
+          ),
+          if (purchase.busy) const LinearProgressIndicator(),
+        ],
+        TextButton.icon(
+          onPressed: purchase.storeAvailable && !purchase.busy
+              ? purchase.restorePurchases
+              : null,
+          icon: const Icon(Icons.restore),
+          label: Text(s.get('adFreeRestore')),
+        ),
+        if (purchase.message != null)
+          Text(
+            s.get('adFreeStoreNotice'),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final units = _units;
@@ -1157,6 +1228,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
           ],
+          if (widget.adFreeController != null &&
+              !kIsWeb &&
+              defaultTargetPlatform == TargetPlatform.android)
+            _buildAdFreeSection(),
           const Divider(height: 32),
           Text(
             s.get('appearance'),
@@ -1297,7 +1372,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-          const YomiPaletteBanner(),
+          if (widget.adFreeController == null ||
+              !widget.adFreeController!.isAdFree)
+            const YomiPaletteBanner(),
           SafeArea(
             minimum: const EdgeInsets.fromLTRB(12, 8, 12, 8),
             child: Row(
