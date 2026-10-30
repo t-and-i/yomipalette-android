@@ -71,6 +71,10 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName(if (playRelease) "playUpload" else "debug")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }
