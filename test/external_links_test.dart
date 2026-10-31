@@ -7,7 +7,7 @@ import 'package:tts_text_mp3_mobile/l10n/strings.dart';
 import 'package:tts_text_mp3_mobile/main.dart';
 
 void main() {
-  const contactUrl = 'https://github.com/t-and-i/yomipalette-android/issues';
+  const contactUrl = 'https://github.com/t-and-i/yomipalette-android';
   const languageLabels = {'en': 'English', 'ja': '日本語', 'zh': '简体中文'};
 
   for (final locale in AppStrings.supportedLocales) {

@@ -1,7 +1,7 @@
 name: tts_text_mp3_mobile
 description: Android client for YomiPalette.
 publish_to: none
-version: 0.2.0+8
+version: 0.2.1+9
 
 environment:
   sdk: ">=3.13.0 <4.0.0"
