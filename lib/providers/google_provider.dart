@@ -4,20 +4,34 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import 'tts_provider.dart';
+import '../services/tts_http_client.dart';
 
-class GoogleProvider implements TtsProvider {
-  GoogleProvider({required this.apiKey, http.Client? client})
-    : _client = client ?? http.Client();
+class GoogleProvider implements TtsProvider, ClosableTtsProvider {
+  GoogleProvider({
+    required this.apiKey,
+    http.Client? client,
+    Duration requestTimeout = const Duration(seconds: 60),
+    int maxRetries = 2,
+    Future<void> Function(Duration delay)? wait,
+  }) : _transport = TtsHttpClient(
+         client: client,
+         timeout: requestTimeout,
+         maxRetries: maxRetries,
+         wait: wait,
+       );
 
   final String apiKey;
-  final http.Client _client;
+  final TtsHttpClient _transport;
+
+  @override
+  void close() => _transport.close();
 
   Uri _uri(String path) =>
       Uri.https('texttospeech.googleapis.com', path, {'key': apiKey});
 
   @override
   Future<List<VoiceInfo>> listVoices() async {
-    final response = await _client.get(_uri('/v1/voices'));
+    final response = await _transport.get(_uri('/v1/voices'));
     _ensureSuccess(response);
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     final voices = body['voices'] as List<dynamic>? ?? const [];
@@ -52,7 +66,7 @@ class GoogleProvider implements TtsProvider {
       },
     };
 
-    final response = await _client.post(
+    final response = await _transport.post(
       _uri('/v1/text:synthesize'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
