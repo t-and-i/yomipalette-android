@@ -69,6 +69,13 @@ android {
     }
 
     buildTypes {
+        getByName("debug") {
+            // Optional isolated on-device QA app: never overwrite Play-installed data.
+            if (providers.gradleProperty("YOMIPALETTE_SIDE_BY_SIDE_QA").orNull == "true") {
+                applicationIdSuffix = ".qa"
+                versionNameSuffix = "-qa"
+            }
+        }
         release {
             signingConfig = signingConfigs.getByName(if (playRelease) "playUpload" else "debug")
             proguardFiles(
@@ -87,4 +94,8 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    testImplementation("junit:junit:4.13.2")
 }
