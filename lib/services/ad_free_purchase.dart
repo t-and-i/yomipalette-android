@@ -4,8 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Google Play Console: create ONE non-consumable product with this exact ID.
-/// Its Japan base price must be configured in Play Console, not in the app.
+import 'purchase_verifier.dart';
+
+/// Google Play Console: one non-consumable item, Japanese price JPY 500.
 const adFreeProductId = 'remove_ads';
 
 abstract class AdFreeBillingGateway {
@@ -45,21 +46,26 @@ class GooglePlayBillingGateway implements AdFreeBillingGateway {
       _store.completePurchase(purchase);
 }
 
-/// Client-side purchase integration for internal testing.
-///
-/// Important: this accepts Google Play Billing purchase notifications, and
-/// retains a local entitlement for offline usage. Local purchase data is NOT
-/// cryptographic verification. Before production, integrate server-side
-/// verification using Google Play Developer API and handle revocations.
-/// Do not put Play Developer API credentials in the Android APK.
+/// Purchase state is driven by Play events AND verification, not solely by a
+/// locally persisted bool. Only explicit QA builds accept unverified receipts.
+/// A production backend must verify purchases and handle voided purchases / RTDN.
 class AdFreePurchaseController extends ChangeNotifier {
-  AdFreePurchaseController({AdFreeBillingGateway? gateway})
-    : _gateway = gateway ?? const GooglePlayBillingGateway();
+  AdFreePurchaseController({
+    AdFreeBillingGateway? gateway,
+    PurchaseVerifier? verifier,
+  }) : _gateway = gateway ?? const GooglePlayBillingGateway(),
+       _verifier = verifier ?? createPurchaseVerifier(),
+       _ownsVerifier = verifier == null;
 
-  static const _entitlementKey = 'ad_free_owned_v1';
+  // Historical QA entitlement: never trust this stored flag in production.
+  static const _qaEntitlementKey = 'ad_free_owned_v1';
 
   final AdFreeBillingGateway _gateway;
+  final PurchaseVerifier _verifier;
+  final bool _ownsVerifier;
   StreamSubscription<List<PurchaseDetails>>? _updates;
+  Future<void> _updateTail = Future<void>.value();
+  final Set<String> _acknowledgedTokens = {};
   bool _disposed = false;
   bool _initialized = false;
   bool _owned = false;
@@ -73,7 +79,12 @@ class AdFreePurchaseController extends ChangeNotifier {
   bool get busy => _busy;
   ProductDetails? get product => _product;
   String? get message => _message;
-  bool get canBuy => !_owned && _available && !_busy && _product != null;
+  bool get canBuy =>
+      !_owned &&
+      _available &&
+      !_busy &&
+      _product != null &&
+      _verifier is! UnconfiguredPurchaseVerifier;
 
   void _notify() {
     if (!_disposed) notifyListeners();
@@ -82,17 +93,22 @@ class AdFreePurchaseController extends ChangeNotifier {
   Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
-    // Register before restoring purchases to avoid losing any events.
+    // Observe Play changes before querying or restoring historical purchases.
     _updates = _gateway.purchases.listen(
       (purchases) => unawaited(handleUpdates(purchases)),
       onError: (Object error) {
+        _busy = false;
         _message = 'Unable to update purchases.';
         _notify();
       },
     );
     try {
       final prefs = await SharedPreferences.getInstance();
-      _owned = prefs.getBool(_entitlementKey) ?? false;
+      // Offline entitlement caching requires a signed server-issued grant.
+      // Legacy QA flags must never unlock ads in ordinary Play releases.
+      _owned = billingQaMode
+          ? (prefs.getBool(_qaEntitlementKey) ?? false)
+          : false;
       _notify();
       _available = await _gateway.isAvailable();
       if (!_available) {
@@ -109,9 +125,12 @@ class AdFreePurchaseController extends ChangeNotifier {
       } else if (_product == null) {
         _message = 'The ad-free item is not available in Google Play yet.';
       }
+      if (_verifier is UnconfiguredPurchaseVerifier) {
+        _message = 'Secure purchase verification is not configured.';
+      }
       _notify();
       await _gateway.restore();
-    } catch (error) {
+    } catch (_) {
       _message = 'Google Play could not be contacted. Try again later.';
       _notify();
     }
@@ -134,7 +153,7 @@ class AdFreePurchaseController extends ChangeNotifier {
       _message = 'Could not start the purchase.';
       _notify();
     }
-    // Purchase results arrive asynchronously via purchaseStream.
+    // New purchase results arrive asynchronously through purchaseStream.
   }
 
   Future<void> restorePurchases() async {
@@ -149,9 +168,21 @@ class AdFreePurchaseController extends ChangeNotifier {
     }
   }
 
-  Future<void> handleUpdates(List<PurchaseDetails> purchases) async {
+  /// Serialize notifications, including overlapping batches from Play.
+  /// A rejected Future must not poison later purchase notifications.
+  Future<void> handleUpdates(List<PurchaseDetails> purchases) {
+    final next = _updateTail.then((_) => _applyUpdates(purchases));
+    _updateTail = next.catchError((Object _) {
+      _busy = false;
+      _message = 'Unable to process purchase updates.';
+      _notify();
+    });
+    return next;
+  }
+
+  Future<void> _applyUpdates(List<PurchaseDetails> purchases) async {
     for (final purchase in purchases) {
-      if (purchase.productID != adFreeProductId) continue;
+      if (_disposed || purchase.productID != adFreeProductId) continue;
       switch (purchase.status) {
         case PurchaseStatus.pending:
           _busy = true;
@@ -160,22 +191,45 @@ class AdFreePurchaseController extends ChangeNotifier {
           break;
         case PurchaseStatus.purchased:
         case PurchaseStatus.restored:
-          // A nonempty store receipt is a minimal sanity check, NOT a secure
-          // replacement for Google Play Developer API verification.
-          if (purchase.verificationData.serverVerificationData.isEmpty) {
-            _busy = false;
-            _message = 'Could not validate the purchase information.';
-            break;
+          final verification = await _verifier.verify(purchase);
+          if (_disposed) return;
+          final prefs = await SharedPreferences.getInstance();
+          switch (verification) {
+            case PurchaseVerificationResult.verified:
+              if (billingQaMode) {
+                await prefs.setBool(_qaEntitlementKey, true);
+              }
+              _owned = true;
+              _busy = false;
+              _message = null;
+              if (purchase.pendingCompletePurchase) {
+                final token = purchase.verificationData.serverVerificationData;
+                if (!_acknowledgedTokens.contains(token)) {
+                  try {
+                    await _gateway.complete(purchase);
+                    _acknowledgedTokens.add(token);
+                  } catch (_) {
+                    _message = 'Google Play could not finalize the purchase.';
+                  }
+                }
+              }
+              break;
+            case PurchaseVerificationResult.rejected:
+              _owned = false;
+              _busy = false;
+              if (billingQaMode) {
+                await prefs.setBool(_qaEntitlementKey, false);
+              }
+              _message = 'Google Play purchase verification was rejected.';
+              break;
+            case PurchaseVerificationResult.unavailable:
+              // Do not grant, revoke, or acknowledge on a transient backend
+              // failure. Restore will retry when verification is available.
+              _busy = false;
+              _message =
+                  'Purchase verification unavailable; try restore later.';
+              break;
           }
-          try {
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setBool(_entitlementKey, true);
-            _owned = true;
-            _message = null;
-          } catch (_) {
-            _message = 'Unable to save the purchase status.';
-          }
-          _busy = false;
           break;
         case PurchaseStatus.error:
           _busy = false;
@@ -186,24 +240,15 @@ class AdFreePurchaseController extends ChangeNotifier {
           _message = null;
           break;
       }
-      if (purchase.pendingCompletePurchase &&
-          (purchase.status == PurchaseStatus.purchased ||
-              purchase.status == PurchaseStatus.restored) &&
-          _owned) {
-        try {
-          await _gateway.complete(purchase);
-        } catch (_) {
-          _message = 'Google Play could not finalize the purchase.';
-        }
-      }
+      _notify();
     }
-    _notify();
   }
 
   @override
   void dispose() {
     _disposed = true;
     unawaited(_updates?.cancel());
+    if (_ownsVerifier) _verifier.dispose();
     super.dispose();
   }
 }
