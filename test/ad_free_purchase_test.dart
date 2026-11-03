@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tts_text_mp3_mobile/services/ad_free_purchase.dart';
+import 'package:tts_text_mp3_mobile/services/purchase_verifier.dart';
 
 class FakeBilling implements AdFreeBillingGateway {
   final controller = StreamController<List<PurchaseDetails>>.broadcast(
@@ -69,6 +70,36 @@ PurchaseDetails record(
   transactionDate: '1',
   status: status,
 )..pendingCompletePurchase = acknowledge;
+
+class FakeVerifier implements PurchaseVerifier {
+  FakeVerifier(this.result);
+  PurchaseVerificationResult result;
+  int calls = 0;
+
+  @override
+  Future<PurchaseVerificationResult> verify(PurchaseDetails purchase) async {
+    calls++;
+    return result;
+  }
+
+  @override
+  void dispose() {}
+}
+
+class DelayedVerifier implements PurchaseVerifier {
+  final first = Completer<PurchaseVerificationResult>();
+  int calls = 0;
+
+  @override
+  Future<PurchaseVerificationResult> verify(PurchaseDetails purchase) async {
+    calls++;
+    if (calls == 1) return first.future;
+    return PurchaseVerificationResult.verified;
+  }
+
+  @override
+  void dispose() {}
+}
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -141,6 +172,70 @@ void main() {
     controller.dispose();
     await fake.controller.close();
   });
+
+  test('server rejection never unlocks and never acknowledges', () async {
+    final fake = FakeBilling();
+    final verifier = FakeVerifier(PurchaseVerificationResult.rejected);
+    final controller = AdFreePurchaseController(
+      gateway: fake,
+      verifier: verifier,
+    );
+    await controller.initialize();
+    await controller.handleUpdates([record(PurchaseStatus.purchased)]);
+    expect(controller.isAdFree, isFalse);
+    expect(fake.completions, 0);
+    expect(verifier.calls, 1);
+    controller.dispose();
+    await fake.controller.close();
+  });
+
+  test('temporary verifier failure does not acknowledge', () async {
+    final fake = FakeBilling();
+    final verifier = FakeVerifier(PurchaseVerificationResult.unavailable);
+    final controller = AdFreePurchaseController(
+      gateway: fake,
+      verifier: verifier,
+    );
+    await controller.initialize();
+    await controller.handleUpdates([record(PurchaseStatus.purchased)]);
+    expect(controller.isAdFree, isFalse);
+    expect(controller.busy, isFalse);
+    expect(fake.completions, 0);
+    verifier.result = PurchaseVerificationResult.verified;
+    await controller.handleUpdates([record(PurchaseStatus.restored)]);
+    expect(controller.isAdFree, isTrue);
+    expect(fake.completions, 1);
+    controller.dispose();
+    await fake.controller.close();
+  });
+
+  test(
+    'concurrent duplicate events are serialized and acknowledged once',
+    () async {
+      final fake = FakeBilling();
+      final verifier = DelayedVerifier();
+      final controller = AdFreePurchaseController(
+        gateway: fake,
+        verifier: verifier,
+      );
+      await controller.initialize();
+      final first = controller.handleUpdates([
+        record(PurchaseStatus.purchased),
+      ]);
+      final second = controller.handleUpdates([
+        record(PurchaseStatus.restored),
+      ]);
+      await Future<void>.delayed(Duration.zero);
+      expect(verifier.calls, 1);
+      verifier.first.complete(PurchaseVerificationResult.verified);
+      await Future.wait([first, second]);
+      expect(verifier.calls, 2);
+      expect(fake.completions, 1);
+      expect(controller.isAdFree, isTrue);
+      controller.dispose();
+      await fake.controller.close();
+    },
+  );
 
   test('offline store disables purchasing', () async {
     final fake = FakeBilling()..storeAvailable = false;

@@ -162,20 +162,25 @@ class MainActivity : FlutterActivity() {
             "selectDirectory" -> selectDirectory(result)
             "verifyDirectory" -> runStorageOperation(result) {
                 val treeUri = Uri.parse(call.argument<String>("uri"))
-                val probe = createOrReplaceFile(treeUri, ".tts-text-mp3-write-test", "text/plain")
-                contentResolver.openOutputStream(probe, "w")!!.use {
-                    it.write("write test".toByteArray())
+                // Use a unique probe name; never overwrite a user's file.
+                val probe = createDocumentInTree(
+                    treeUri, ".yomipalette-probe-${UUID.randomUUID()}.txt", "text/plain"
+                )
+                try {
+                    (contentResolver.openOutputStream(probe, "w")
+                        ?: throw IOException("Cannot open the probe file.")).use {
+                        it.write("write test".toByteArray())
+                    }
+                } finally {
+                    DocumentsContract.deleteDocument(contentResolver, probe)
                 }
-                DocumentsContract.deleteDocument(contentResolver, probe)
                 null
             }
             "writeFile" -> runStorageOperation(result) {
                 val treeUri = Uri.parse(call.argument<String>("uri"))
                 val name = call.argument<String>("name") ?: throw IOException("Missing filename")
                 val bytes = call.argument<ByteArray>("bytes") ?: throw IOException("Missing data")
-                val fileUri = createOrReplaceFile(treeUri, name, "audio/mpeg")
-                contentResolver.openOutputStream(fileUri, "w")!!.use { it.write(bytes) }
-                fileUri.toString()
+                writeDocumentSafely(treeUri, name, bytes)
             }
             else -> result.notImplemented()
         }
@@ -224,34 +229,68 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun createOrReplaceFile(treeUri: Uri, name: String, mimeType: String): Uri {
+    private fun createDocumentInTree(treeUri: Uri, name: String, mimeType: String): Uri {
         val parent = DocumentsContract.buildDocumentUriUsingTree(
-            treeUri,
-            DocumentsContract.getTreeDocumentId(treeUri)
+            treeUri, DocumentsContract.getTreeDocumentId(treeUri)
         )
+        return DocumentsContract.createDocument(contentResolver, parent, mimeType, name)
+            ?: throw IOException("Could not create $name")
+    }
+
+    private fun writeDocumentSafely(treeUri: Uri, name: String, bytes: ByteArray): String {
         val children = DocumentsContract.buildChildDocumentsUriUsingTree(
-            treeUri,
-            DocumentsContract.getTreeDocumentId(treeUri)
+            treeUri, DocumentsContract.getTreeDocumentId(treeUri)
         )
-        contentResolver.query(
-            children,
-            arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME),
-            null,
-            null,
-            null
-        )?.use { cursor ->
-            val idColumn = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-            val nameColumn = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-            while (cursor.moveToNext()) {
-                if (cursor.getString(nameColumn) == name) {
-                    val existing = DocumentsContract.buildDocumentUriUsingTree(treeUri, cursor.getString(idColumn))
-                    DocumentsContract.deleteDocument(contentResolver, existing)
-                    break
+        val files = object : SafeDocumentWriter.FileOperations {
+            override fun find(name: String): String? {
+                contentResolver.query(
+                    children,
+                    arrayOf(
+                        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                        DocumentsContract.Document.COLUMN_DISPLAY_NAME
+                    ),
+                    null, null, null
+                )?.use { cursor ->
+                    val idColumn = cursor.getColumnIndexOrThrow(
+                        DocumentsContract.Document.COLUMN_DOCUMENT_ID
+                    )
+                    val nameColumn = cursor.getColumnIndexOrThrow(
+                        DocumentsContract.Document.COLUMN_DISPLAY_NAME
+                    )
+                    while (cursor.moveToNext()) {
+                        if (cursor.getString(nameColumn) == name) {
+                            return DocumentsContract.buildDocumentUriUsingTree(
+                                treeUri, cursor.getString(idColumn)
+                            ).toString()
+                        }
+                    }
+                }
+                return null
+            }
+
+            override fun create(name: String, mimeType: String): String =
+                createDocumentInTree(treeUri, name, mimeType).toString()
+
+            override fun write(id: String, bytes: ByteArray) {
+                (contentResolver.openOutputStream(Uri.parse(id), "w")
+                    ?: throw IOException("Cannot open the new audio file.")).use {
+                    it.write(bytes)
+                    it.flush()
+                }
+            }
+
+            override fun rename(id: String, name: String): String =
+                (DocumentsContract.renameDocument(contentResolver, Uri.parse(id), name)
+                    ?: throw IOException("This document provider does not support renaming."))
+                    .toString()
+
+            override fun delete(id: String) {
+                if (!DocumentsContract.deleteDocument(contentResolver, Uri.parse(id))) {
+                    throw IOException("Could not delete temporary document.")
                 }
             }
         }
-        return DocumentsContract.createDocument(contentResolver, parent, mimeType, name)
-            ?: throw IOException("Could not create $name")
+        return SafeDocumentWriter(files).write(name, "audio/mpeg", bytes)
     }
 
     private fun runStorageOperation(result: MethodChannel.Result, operation: () -> Any?) {

@@ -23,7 +23,7 @@ Look for `Google Mobile Ads SDK initialized`, `Requesting TEST banner`, and `Ban
 
 ## Play internal testing
 
-Prepare an **upload-signed** AAB for a separate QA-only internal test deployment, retaining the original upload key, app ID and package ID. The existing `scripts/build-play.ps1` invokes Flutter without test flags, so it always creates a normal production-ad AAB. For a QA-only Play build, the build script must explicitly pass both defines to `flutter build appbundle --release` while preserving its signature checks. Do not upload an unsigned or debug-signed AAB. After QA, build a new normal release AAB without those flags and increment versionCode before the next Play upload.
+Prepare an **upload-signed** AAB for a separate QA-only internal test deployment, retaining the original upload key, app ID and package ID. Run `powershell -ExecutionPolicy Bypass -File scripts/build-play.ps1 -InternalTestAds` to enable both Google sample banner ads and diagnostic logging; this verifies the AAB signature against the saved upload certificate and copies the result to `release/YomiPalette-<version>-build<code>-internal-test.aab`. The default `scripts/build-play.ps1` (without the switch) still creates a production-ad AAB. Do not upload an unsigned or debug-signed AAB. **Never promote an internal-test-ads build to a production track.** After QA, build a new normal release AAB without the switch and increment versionCode before the next Play upload.
 
 For a test of actual production ad delivery instead, keep the production ad unit, register the physical test device in AdMob first, and check its test status before requesting ads. Google Play's internal testing track does not by itself switch production ads to test mode.
 
