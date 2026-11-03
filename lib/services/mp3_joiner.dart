@@ -5,66 +5,87 @@ import 'package:flutter_lame/flutter_lame.dart';
 
 import '../providers/tts_provider.dart';
 
-/// Decode each independently encoded MP3 clip to PCM and encode a single MP3
-/// stream. This avoids concatenating multiple ID3/Xing headers and independent
-/// MP3 encoder streams in one output file.
+/// Streaming MP3 joiner. Keeps only the current decoded PCM segment and
+/// LAME's internal state instead of retaining all MP3 clips.
+class Mp3JoinSession {
+  LameMp3Encoder? _encoder;
+  int? _sampleRate;
+  int? _channels;
+  bool _finished = false;
+
+  Future<Uint8List> add(Uint8List clip) async {
+    if (_finished) throw StateError('MP3 join session is finished.');
+    try {
+      final pcm = decodeMp3(clip);
+      if (pcm.frameCount == 0) {
+        throw const TtsProviderException(
+          'TTS returned an empty audio segment.',
+        );
+      }
+      _sampleRate ??= pcm.sampleRate;
+      _channels ??= pcm.channels;
+      if (pcm.sampleRate != _sampleRate || pcm.channels != _channels) {
+        throw const TtsProviderException(
+          'TTS audio segments use different sample rates or channel counts.',
+        );
+      }
+      if (_channels != 1 && _channels != 2) {
+        throw const TtsProviderException(
+          'Unsupported TTS audio channel count.',
+        );
+      }
+      _encoder ??= LameMp3Encoder(
+        sampleRate: _sampleRate!,
+        numChannels: _channels!,
+        bitRate: 128,
+      );
+      if (_channels == 1) {
+        return await _encoder!.encode(leftChannel: pcm.samples);
+      }
+      final frames = pcm.frameCount;
+      final left = Int16List(frames);
+      final right = Int16List(frames);
+      for (var i = 0; i < frames; i++) {
+        left[i] = pcm.samples[i * 2];
+        right[i] = pcm.samples[i * 2 + 1];
+      }
+      return await _encoder!.encode(leftChannel: left, rightChannel: right);
+    } catch (error) {
+      if (error is TtsProviderException) rethrow;
+      throw TtsProviderException('Could not combine TTS MP3 clips: $error');
+    }
+  }
+
+  Future<Uint8List> finish() async {
+    if (_finished) throw StateError('MP3 join session already finished.');
+    _finished = true;
+    return _encoder == null ? Uint8List(0) : _encoder!.flush();
+  }
+
+  Future<void> close() async {
+    _finished = true;
+    final encoder = _encoder;
+    _encoder = null;
+    await encoder?.close();
+  }
+}
+
+/// Preserve the existing in-memory API for short previews and test helpers.
 class Mp3Joiner {
   static Future<Uint8List> join(List<Uint8List> clips) async {
     if (clips.isEmpty) return Uint8List(0);
     if (clips.length == 1) return clips.single;
 
-    LameMp3Encoder? encoder;
+    final session = Mp3JoinSession();
     final output = BytesBuilder(copy: false);
-    int? sampleRate;
-    int? channels;
     try {
       for (final clip in clips) {
-        final pcm = decodeMp3(clip);
-        if (pcm.frameCount == 0) {
-          throw const TtsProviderException(
-            'TTS returned an empty audio segment.',
-          );
-        }
-        sampleRate ??= pcm.sampleRate;
-        channels ??= pcm.channels;
-        if (pcm.sampleRate != sampleRate || pcm.channels != channels) {
-          throw const TtsProviderException(
-            'TTS audio segments use different sample rates or channel counts.',
-          );
-        }
-        if (channels != 1 && channels != 2) {
-          throw const TtsProviderException(
-            'Unsupported TTS audio channel count.',
-          );
-        }
-        encoder ??= LameMp3Encoder(
-          sampleRate: sampleRate,
-          numChannels: channels,
-          bitRate: 128,
-        );
-        final interleaved = pcm.samples;
-        if (channels == 1) {
-          output.add(await encoder.encode(leftChannel: interleaved));
-        } else {
-          final frames = pcm.frameCount;
-          final left = Int16List(frames);
-          final right = Int16List(frames);
-          for (var i = 0; i < frames; i++) {
-            left[i] = interleaved[i * 2];
-            right[i] = interleaved[i * 2 + 1];
-          }
-          output.add(
-            await encoder.encode(leftChannel: left, rightChannel: right),
-          );
-        }
+        output.add(await session.add(clip));
       }
-      output.add(await encoder!.flush());
+      output.add(await session.finish());
       return output.takeBytes();
-    } catch (error) {
-      if (error is TtsProviderException) rethrow;
-      throw TtsProviderException('Could not combine TTS MP3 clips: $error');
     } finally {
-      await encoder?.close();
+      await session.close();
     }
   }
 }
