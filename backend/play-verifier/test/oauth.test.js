@@ -51,6 +51,28 @@ test('service account JWT is properly RS256-signed and scoped', async () => {
     },
   );
   assert.equal(result, 'fake-access-token-for-test-only');
+
+  // Account-level Secrets Store bindings resolve secrets asynchronously.
+  let secretReads = 0;
+  const fromStore = await getPlayAccessToken(
+    { GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: {
+      async get() {
+        secretReads++;
+        return JSON.stringify(account);
+      },
+    } },
+    {
+      now: () => now,
+      fetchImpl: async (_url, options) => {
+        assert.equal(options.body.get('assertion'), jwt);
+        return new Response(JSON.stringify({
+          access_token: 'fake-access-token-for-test-only',
+        }), { status: 200 });
+      },
+    },
+  );
+  assert.equal(fromStore, 'fake-access-token-for-test-only');
+  assert.equal(secretReads, 1);
 });
 
 test('missing service account or Google OAuth failure does not leak secret', async () => {
@@ -66,4 +88,28 @@ test('missing service account or Google OAuth failure does not leak secret', asy
     createAssertion(account),
     /not configured/,
   );
+});
+
+test('Secrets Store failures and invalid values never call Google', async () => {
+  let calls = 0;
+  const failFetch = async () => {
+    calls++;
+    throw new Error('Google API must not be called.');
+  };
+  for (const binding of [
+    { async get() { throw new Error('sensitive test detail'); } },
+    { async get() { return null; } },
+    { async get() { return '{invalid-json'; } },
+    { async get() { return 42; } },
+    {},
+  ]) {
+    await assert.rejects(
+      getPlayAccessToken(
+        { GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: binding },
+        { fetchImpl: failFetch },
+      ),
+      /service account|secret/i,
+    );
+  }
+  assert.equal(calls, 0);
 });

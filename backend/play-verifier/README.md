@@ -11,7 +11,7 @@ YomiPaletteの `remove_ads`（非消耗型買い切り商品）用に、**Cloudf
 5. WorkerのCron Triggerが6時間ごとに **Voided Purchases API** を照会し、過去の同期と2日間重複する期間を取り込んでD1に失効情報を追加します。初回は29日前から収集します。
 6. 戻り値はアプリ側の既存API契約 `{"status":"verified"|"rejected"|"unavailable"}` に対応します（`unavailable` はHTTP 503）。
 
-`/verify` の購入トークンはGoogleへの照会にのみ使用します。D1には**購入トークンそのものではなくSHA-256ハッシュ**を保存します。サービスアカウント秘密鍵はWorkers secretに置き、アプリ・Git・ログ・HTTP応答に含めません。
+`/verify` の購入トークンはGoogleへの照会にのみ使用します。D1には**購入トークンそのものではなくSHA-256ハッシュ**を保存します。サービスアカウント秘密鍵はCloudflare Secrets Storeに置き、アプリ・Git・ログ・HTTP応答に含めません。
 
 ### 現行アプリとの契約
 
@@ -50,8 +50,8 @@ Cloudflare WorkersとD1の利用方針で進める場合、以下の設定を整
 
 1. **Google Play Console** でDeveloper APIアクセスを有効にし、専用サービスアカウントにYomiPaletteの購入データを確認するための最小限の権限を付与します。サービスアカウントの秘密鍵をGitHubやAndroid APKに保存しないでください。
 2. **Cloudflare D1** に `yomipalette-play-entitlements` を作成します。例：`npx wrangler d1 create yomipalette-play-entitlements`。
-3. `wrangler.example.jsonc` を `wrangler.jsonc` にコピーし、実際のD1 `database_id` に差し替えます。例：`npx wrangler d1 migrations apply ENTITLEMENTS_DB --remote`。実際に使用するアカウントとデータベース名を確認してから実行してください。
-4. 秘密鍵をCloudflare Secretsで `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` として登録します。例：`npx wrangler secret put GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`。**この値やService Account JSONを会話・ログ・Gitに貼り付けない**こと。
+3. `wrangler.example.jsonc` をGit対象外の `wrangler.jsonc` にコピーし、T AND Iの `account_id`、実際のD1 `database_id`、Secrets Storeの `store_id` を設定します。D1テーブルはCloudflareコンソールから手動作成済みです。マイグレーション履歴を整合させる前に `wrangler d1 migrations apply --remote` を実行しないでください。
+4. 会社アカウントのCloudflare Secrets Storeに `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`（scope: `workers`）を登録し、`secrets_store_secrets` の同名Bindingを設定します。Workerは `await env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON.get()` で取得し、以前の通常Secret文字列形式も互換維持します。**Worker未作成であり、`wrangler secret put` はWorkerを自動デプロイし得るため使用しません。JSON秘密鍵を会話・ログ・Gitに貼り付けないでください。**
 5. Pub/Subからの**RTDN**（特に返金・取消）をOIDCで認証してWorkerに届ける仕組み、Cloudflare側の**Rate Limiting**、**Play Integrity／トークン再利用防止**、監視・アラートを別途実装・検証してください。
 6. Cronをローカルで模擬し、D1の初回同期を成功させてから購入APIをテストしてください。初回同期前、Cron失敗から12時間超、または29日超の同期断絶時は、HTTP 503にして権利を付与しません。
 7. インフラと認証が整ったあと、実際のPlayライセンステスターで購入・復元・返金取消を確認します。**それまではWorkersのデプロイもアプリの本番AAB作成も行わない**でください。
@@ -71,7 +71,7 @@ Cloudflare WorkersとD1の利用方針で進める場合、以下の設定を整
 - **API濫用防止**：HTTPS endpointはAndroidの公開クライアントから到達可能なため、Cloudflare WAFによるIP・リクエストレート制限やPlay Integrity検証を整える必要があります。Cloudflare Accessの対話型ログインを強制するとアプリから使用できません。
 - **オフライン権利**：アプリは署名付きオフライン権利キャッシュ未実装です。起動後の購入確認にはネットワーク接続が必要です。
 - **プライバシー/データセーフティ**：購入トークンをGoogleと検証バックエンドが取り扱うため、正式公開前にプライバシーポリシー・Play Consoleの申告を見直す必要があります。
-- **本物のAPI疎通未検証**：Google Play Consoleのアクセス設定、サービスアカウントとD1の実環境が未設定で、今回のテストはすべてモックです。
+- **本物のAPI疎通未検証**：Google Play Consoleのサービスアカウント権限、Cloudflare D1、Secrets Storeの設定は完了しましたが、Workerは未作成・未デプロイで、Google Play API実通信は未実施です。テストはすべてモックです。
 
 ## 参照
 

@@ -59,12 +59,28 @@ export async function getPlayAccessToken(env, {
   fetchImpl = fetch,
   now = Date.now,
 } = {}) {
-  if (!env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON) {
+  const secretBinding = env?.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON;
+  if (!secretBinding) {
+    throw new Error('Google Play service account not configured.');
+  }
+  // The Cloudflare Secrets Store binding exposes async get(). Keep the
+  // ordinary Worker Secret string format for local and legacy QA tests.
+  let secret;
+  try {
+    secret = typeof secretBinding === 'string'
+      ? secretBinding
+      : typeof secretBinding.get === 'function'
+        ? await secretBinding.get()
+        : null;
+  } catch {
+    throw new Error('Google Play service account secret unavailable.');
+  }
+  if (typeof secret !== 'string' || !secret) {
     throw new Error('Google Play service account not configured.');
   }
   let account;
   try {
-    account = JSON.parse(env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON);
+    account = JSON.parse(secret);
   } catch {
     throw new Error('Service account secret is not valid JSON.');
   }
