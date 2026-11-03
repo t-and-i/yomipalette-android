@@ -4,14 +4,29 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import 'tts_provider.dart';
+import '../services/tts_http_client.dart';
 
-class AzureProvider implements TtsProvider {
-  AzureProvider({required this.key, required this.region, http.Client? client})
-      : _client = client ?? http.Client();
+class AzureProvider implements TtsProvider, ClosableTtsProvider {
+  AzureProvider({
+    required this.key,
+    required this.region,
+    http.Client? client,
+    Duration requestTimeout = const Duration(seconds: 60),
+    int maxRetries = 2,
+    Future<void> Function(Duration delay)? wait,
+  }) : _transport = TtsHttpClient(
+         client: client,
+         timeout: requestTimeout,
+         maxRetries: maxRetries,
+         wait: wait,
+       );
 
   final String key;
   final String region;
-  final http.Client _client;
+  final TtsHttpClient _transport;
+
+  @override
+  void close() => _transport.close();
 
   Uri _uri(String path) => Uri.https('$region.tts.speech.microsoft.com', path);
 
@@ -19,7 +34,7 @@ class AzureProvider implements TtsProvider {
 
   @override
   Future<List<VoiceInfo>> listVoices() async {
-    final response = await _client.get(
+    final response = await _transport.get(
       _uri('/cognitiveservices/voices/list'),
       headers: _headers,
     );
@@ -53,7 +68,7 @@ class AzureProvider implements TtsProvider {
     final signedPitch = '${pitchHz >= 0 ? '+' : ''}${pitchHz}Hz';
     final ssml =
         '''<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="$language"><voice name="$voice"><prosody rate="$signedRate" volume="$signedVolume" pitch="$signedPitch">$escaped</prosody></voice></speak>''';
-    final response = await _client.post(
+    final response = await _transport.post(
       _uri('/cognitiveservices/v1'),
       headers: {
         ..._headers,

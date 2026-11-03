@@ -17,6 +17,7 @@ import '../models/chapter.dart';
 import '../providers/device_tts_provider.dart';
 import '../providers/tts_provider.dart';
 import '../services/audio_generator.dart';
+import '../services/audio_generation_cancellation.dart';
 import '../services/ad_free_purchase.dart';
 import '../services/document_reader.dart';
 import '../services/output_directory_service.dart';
@@ -59,6 +60,7 @@ class _HomeScreenState extends State<HomeScreen> {
   StreamSubscription<bool>? _playerSubscription;
 
   bool _busy = false;
+  bool _isGenerating = false;
   bool _isPreviewPlaying = false;
   bool _showLimitations = true;
   String? _outputDirectory;
@@ -310,19 +312,23 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadVoices() async => _run(() async {
     final provider = await _provider();
-    final voices = await provider.listVoices();
-    voices.sort(
-      (a, b) => '${a.locale}${a.name}'.compareTo('${b.locale}${b.name}'),
-    );
-    if (!mounted) return;
-    final locale = voices.isEmpty ? null : _preferredVoiceLocale(voices);
-    final matching = voices.where((voice) => voice.locale == locale).toList();
-    setState(() {
-      _tts.voices = voices;
-      _tts.voiceLocale = locale;
-      _tts.voice = matching.isEmpty ? null : matching.first;
-      _status = '${voices.length} voices';
-    });
+    try {
+      final voices = await provider.listVoices();
+      voices.sort(
+        (a, b) => '${a.locale}${a.name}'.compareTo('${b.locale}${b.name}'),
+      );
+      if (!mounted) return;
+      final locale = voices.isEmpty ? null : _preferredVoiceLocale(voices);
+      final matching = voices.where((voice) => voice.locale == locale).toList();
+      setState(() {
+        _tts.voices = voices;
+        _tts.voiceLocale = locale;
+        _tts.voice = matching.isEmpty ? null : matching.first;
+        _status = '${voices.length} voices';
+      });
+    } finally {
+      closeTtsProvider(provider);
+    }
   });
 
   Future<void> _loadDeviceEngines() async {
@@ -395,79 +401,86 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _generate({bool resume = false}) async {
     if (_document.chapters.isEmpty) return _showError(s.get('noFile'));
-    await _run(() async {
-      final units = _units;
-      if (units.isEmpty) {
-        throw FormatException(s.get('invalidChars'));
-      }
-      final selectedIndices = _document.selectedUnitIndices;
-      final selectedUnits = selectedIndices
-          .map((index) => units[index])
-          .toList();
-      if (selectedUnits.isEmpty) {
-        throw FormatException(s.get('noUnitsChecked'));
-      }
-      final voice = _tts.voice;
-      if (voice == null) {
-        throw TtsProviderException(s.get('voiceRequired'));
-      }
-      final outputDirectory = _outputDirectory;
-      if (outputDirectory != null) {
-        try {
-          await OutputDirectoryService.verify(outputDirectory);
-        } catch (_) {
-          throw TtsProviderException(s.get('outputNotWritable'));
+    _audio.prepareGeneration();
+    setState(() => _isGenerating = true);
+    try {
+      await _run(() async {
+        final units = _units;
+        if (units.isEmpty) {
+          throw FormatException(s.get('invalidChars'));
         }
-      }
-      if (!resume) {
-        _audio.generatedPaths.clear();
-        _audio.resumeIndex = 0;
-      }
-      final provider = await _provider();
-      final paths = await _audio.generate(
-        provider: provider,
-        units: selectedUnits,
-        voiceName: voice.name,
-        outputDirectory: outputDirectory,
-        ratePercent: _tts.ratePercent,
-        volumePercent: _tts.volumePercent,
-        pitchHz: _tts.pitchHz,
-        autoSplit: _tts.providerName != 'google' || _tts.ttsAutoSplit,
-        autoRetry: _tts.ttsAutoRetry,
-        onChunkProgress: (unit, unitTotal, chunk, chunkTotal, retrying) {
-          if (!mounted || !_tts.ttsShowProgress) return;
-          setState(
-            () => _status =
-                '${s.get('unitProgress')} $unit/$unitTotal — '
-                '${s.get(retrying ? 'ttsRetrying' : 'ttsChunkProgress')} '
-                '$chunk/$chunkTotal',
-          );
-        },
-        onProgress: (current, total) {
-          if (mounted) setState(() => _status = '$current / $total');
-        },
-        onFileGenerated: (path, current, total) {
-          if (!mounted) return;
-          setState(() {
-            if (!_audio.generatedPaths.contains(path)) {
-              _audio.generatedPaths.add(path);
-            }
-            _document.checkedUnitIndices.remove(selectedIndices[current - 1]);
-            _audio.resumeIndex = current < total ? 0 : null;
-          });
-        },
-      );
-      if (!mounted) return;
-      setState(() {
-        _audio.resumeIndex = null;
-        _status = s.get('done');
-      });
-      if (outputDirectory == null) {
-        await Share.shareXFiles(paths.map(XFile.new).toList());
+        final selectedIndices = _document.selectedUnitIndices;
+        final selectedUnits = selectedIndices
+            .map((index) => units[index])
+            .toList();
+        if (selectedUnits.isEmpty) {
+          throw FormatException(s.get('noUnitsChecked'));
+        }
+        final voice = _tts.voice;
+        if (voice == null) {
+          throw TtsProviderException(s.get('voiceRequired'));
+        }
+        final outputDirectory = _outputDirectory;
+        if (outputDirectory != null) {
+          try {
+            await OutputDirectoryService.verify(outputDirectory);
+          } catch (_) {
+            throw TtsProviderException(s.get('outputNotWritable'));
+          }
+        }
+        if (!resume) {
+          _audio.generatedPaths.clear();
+          _audio.resumeIndex = 0;
+        }
+        final provider = await _provider();
+        final paths = await _audio.generate(
+          provider: provider,
+          units: selectedUnits,
+          voiceName: voice.name,
+          outputDirectory: outputDirectory,
+          ratePercent: _tts.ratePercent,
+          volumePercent: _tts.volumePercent,
+          pitchHz: _tts.pitchHz,
+          autoSplit: _tts.providerName != 'google' || _tts.ttsAutoSplit,
+          autoRetry: _tts.ttsAutoRetry,
+          onChunkProgress: (unit, unitTotal, chunk, chunkTotal, retrying) {
+            if (!mounted || !_tts.ttsShowProgress) return;
+            setState(
+              () => _status =
+                  '${s.get('unitProgress')} $unit/$unitTotal — '
+                  '${s.get(retrying ? 'ttsRetrying' : 'ttsChunkProgress')} '
+                  '$chunk/$chunkTotal',
+            );
+          },
+          onProgress: (current, total) {
+            if (mounted) setState(() => _status = '$current / $total');
+          },
+          onFileGenerated: (path, current, total) {
+            if (!mounted) return;
+            setState(() {
+              if (!_audio.generatedPaths.contains(path)) {
+                _audio.generatedPaths.add(path);
+              }
+              _document.checkedUnitIndices.remove(selectedIndices[current - 1]);
+              _audio.resumeIndex = current < total ? 0 : null;
+            });
+          },
+        );
         if (!mounted) return;
-        await _askDeleteSharedFiles(paths);
-      }
-    });
+        setState(() {
+          _audio.resumeIndex = null;
+          _status = s.get('done');
+        });
+        if (outputDirectory == null) {
+          await Share.shareXFiles(paths.map(XFile.new).toList());
+          if (!mounted) return;
+          await _askDeleteSharedFiles(paths);
+        }
+      });
+    } finally {
+      _audio.clearPendingGeneration();
+      if (mounted) setState(() => _isGenerating = false);
+    }
   }
 
   Future<void> _askDeleteSharedFiles(List<String> paths) async {
@@ -531,7 +544,11 @@ class _HomeScreenState extends State<HomeScreen> {
         maxCharsText: _document.charsController.text,
       );
     } catch (error) {
-      _showError(error);
+      if (error is AudioGenerationCancelled) {
+        if (mounted) setState(() => _status = s.get('generationCancelled'));
+      } else {
+        _showError(error);
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -957,6 +974,7 @@ class _HomeScreenState extends State<HomeScreen> {
       bottomNavigationBar: GenerationActions(
         strings: s,
         busy: _busy,
+        generating: _isGenerating && _audio.canCancel,
         previewPlaying: _isPreviewPlaying,
         showProgress: _tts.ttsShowProgress,
         status: _status,
@@ -966,6 +984,11 @@ class _HomeScreenState extends State<HomeScreen> {
         canGenerateResume: _audio.resumeIndex != null,
         onPreview: _isPreviewPlaying ? _stopPreview : _preview,
         onGenerate: () => _generate(resume: _audio.resumeIndex != null),
+        onCancel: () {
+          if (!_audio.canCancel) return;
+          _audio.cancel();
+          setState(() => _status = s.get('generationCancelling'));
+        },
       ),
     );
   }

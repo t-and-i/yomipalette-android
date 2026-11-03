@@ -19,6 +19,18 @@ abstract interface class TtsProvider {
   });
 }
 
+/// Optional lifecycle contract for providers that own a network client.
+/// Device and Edge providers already manage per-operation resources.
+abstract interface class ClosableTtsProvider {
+  void close();
+}
+
+void closeTtsProvider(TtsProvider provider) {
+  if (provider is ClosableTtsProvider) {
+    (provider as ClosableTtsProvider).close();
+  }
+}
+
 class TtsProviderException implements Exception {
   const TtsProviderException(this.message);
   final String message;
