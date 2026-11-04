@@ -15,6 +15,23 @@ export async function tokenHash(token) {
     .join('');
 }
 
+/** Idempotently record a revoked purchase; never store the raw token. */
+export async function recordRevocation(db, purchaseToken, voidedAtMs = Date.now()) {
+  if (!db || typeof purchaseToken !== 'string' ||
+      purchaseToken.length < 8 || purchaseToken.length > 4096) {
+    throw new Error('Invalid revocation record');
+  }
+  const hash = await tokenHash(purchaseToken);
+  const timestamp = Number(voidedAtMs);
+  if (!Number.isFinite(timestamp) || timestamp < 0) {
+    throw new Error('Invalid revocation time');
+  }
+  await db.prepare(
+    'INSERT INTO revoked_purchase_tokens (token_hash, voided_at_ms) VALUES (?, ?) ' +
+    'ON CONFLICT(token_hash) DO UPDATE SET voided_at_ms = MAX(voided_at_ms, excluded.voided_at_ms)',
+  ).bind(hash, timestamp).run();
+}
+
 export async function checkRevocation(db, hash, currentMs = Date.now()) {
   if (!db) throw new Error('D1 database binding is missing.');
   const sync = await db.prepare(
@@ -73,12 +90,12 @@ export async function syncVoidedPurchases(db, accessToken, {
     });
     for (const item of result.voided) {
       if (typeof item?.purchaseToken !== 'string') continue;
-      const hash = await tokenHash(item.purchaseToken);
       const voidedTime = Number(item.voidedTimeMillis ?? currentMs);
-      await db.prepare(
-        'INSERT INTO revoked_purchase_tokens (token_hash, voided_at_ms) VALUES (?, ?) ' +
-        'ON CONFLICT(token_hash) DO UPDATE SET voided_at_ms = MAX(voided_at_ms, excluded.voided_at_ms)',
-      ).bind(hash, Number.isFinite(voidedTime) ? voidedTime : currentMs).run();
+      await recordRevocation(
+        db,
+        item.purchaseToken,
+        Number.isFinite(voidedTime) && voidedTime >= 0 ? voidedTime : currentMs,
+      );
       count++;
     }
     pageToken = result.nextPageToken;

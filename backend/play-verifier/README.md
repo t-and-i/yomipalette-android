@@ -64,6 +64,37 @@ Cloudflare WorkersとD1の利用方針で進める場合、以下の設定を整
 
 これは説明用の例であり、未設定のURLをそのまま使ってはいけません。
 
+## RTDNの認証済み受信（ローカル実装済み・未接続）
+
+- `POST /rtdn` は **Google Pub/Subの認証付きPush専用**です。JSON本文だけでは認証できません。
+- Googleの署名付きOIDC JWTについて、公開鍵によるRS256署名、`iss`、`aud`、`email`、`email_verified`、有効期限を検証します。
+- Pub/Subのサブスクリプション名も照合します。不正な認証は401、処理障害は503、正常処理は204です。
+- 全額返金は購入トークンのSHA-256ハッシュをD1に記録します。取消・一部返金はGoogle Play APIで最新の状態を確認します。
+- 重複通知はD1のUPSERTで冪等処理します。**RTDN受信では`sync_state`の定期同期時刻を更新しません。**
+- 単なる購入通知やテスト通知では広告解除権を直接付与しません。権利付与は既存`POST /verify`で再検証します。
+
+### 本番接続前の設定（現時点では未実施）
+
+1. Google Cloudプロジェクト`tts-text-mp3`でPub/Sub APIを有効にし、RTDN専用のトピックを作成します。トピックへのPublisher権限はGoogle公式指定の`google-play-developer-notifications@system.gserviceaccount.com`だけに付与します。
+2. Pub/Sub **Push認証専用サービスアカウント**を新規作成します（既存の購入検証用サービスアカウントとは分離）。秘密鍵作成は不要です。Google Pub/SubサービスエージェントにこのアカウントのToken Creator権限が必要です。
+3. Workerデプロイ・厳格な不正利用対策・URL確定の後、Pub/Subに認証付きPushサブスクリプションを作り、`POST https://<worker-host>/rtdn`を通知先にします。
+4. Workerの`vars`（秘密情報ではない設定）に次の3項目を登録します。`RTDN_OIDC_AUDIENCE`はPub/Sub PushのOIDC Audienceと**完全一致**させます。下記は値の例であり、未確定のままデプロイしないでください。
+
+```jsonc
+"vars": {
+  "RTDN_OIDC_AUDIENCE": "https://<worker-host>/rtdn",
+  "RTDN_PUSH_SERVICE_ACCOUNT_EMAIL": "<push-auth-service-account>@tts-text-mp3.iam.gserviceaccount.com",
+  "RTDN_PUBSUB_SUBSCRIPTION": "projects/tts-text-mp3/subscriptions/<subscription-id>"
+}
+```
+
+5. Google Play Console「収益化のセットアップ」でRTDNを有効にし、トピックIDを設定します。YomiPaletteでは **定期購入と1回限りの商品のすべての通知** を選びます。テスト通知後、受信・認証・D1更新を確認します。
+6. Pub/Subの再試行・Dead Letter Topic・監視を追加してください。署名付きJWTの公開鍵取得失敗／Google API障害／D1障害では503で再送を要求します。
+7. 公開`/verify`のレート制限、購入トークンの第三者再利用防止、オフライン権利設計は未完了です。**Workerの本番公開は引き続き禁止**します。
+
+参考: https://developer.android.com/google/play/billing/getting-ready 、
+https://docs.cloud.google.com/pubsub/docs/authenticate-push-subscriptions
+
 ## 特に重要な未完了事項
 
 - **RTDN未接続**：現状は6時間周期のVoided Purchases APIによるポーリングだけです。返金後すぐに失効しない時間帯があります。GoogleはRTDNとVoided Purchases APIの併用を推奨しています。

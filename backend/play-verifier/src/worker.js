@@ -1,4 +1,5 @@
 import { getPlayAccessToken } from './oauth.js';
+import { handleRtdn } from './rtdn.js';
 import {
   PACKAGE_NAME,
   PRODUCT_ID,
@@ -77,6 +78,9 @@ export async function handleRequest(request, env, {
   getAccessToken = getPlayAccessToken,
 } = {}) {
   const url = new URL(request.url);
+  if (url.pathname === '/rtdn') {
+    return handleRtdn(request, env, { now, fetchImpl, getAccessToken });
+  }
   if (url.pathname !== '/verify') return json(404, { error: 'not_found' });
   if (request.method !== 'POST') return json(405, { error: 'method_not_allowed' });
 
