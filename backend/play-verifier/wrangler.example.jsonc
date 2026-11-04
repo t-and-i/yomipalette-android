@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/wrangler.json",
+  "name": "yomipalette-play-verifier",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-11-04",
+  "observability": { "enabled": true },
+  "triggers": { "crons": ["0 */6 * * *"] },
+  "d1_databases": [
+    {
+      "binding": "ENTITLEMENTS_DB",
+      "database_name": "yomipalette-play-entitlements",
+      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+    }
+  ],
+  "secrets_store_secrets": [
+    {
+      "binding": "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON",
+      "store_id": "REPLACE_WITH_YOUR_SECRETS_STORE_ID",
+      "secret_name": "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"
+    }
+  ]
+}
