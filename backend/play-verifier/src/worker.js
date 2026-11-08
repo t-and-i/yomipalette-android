@@ -1,5 +1,7 @@
 import { getPlayAccessToken } from './oauth.js';
+import { verifyPlayIntegrity, INTEGRITY_SCOPE } from './play-integrity.js';
 import { handleRtdn } from './rtdn.js';
+import { allowVerifyIp, allowVerifyToken } from './rate-limits.js';
 import {
   PACKAGE_NAME,
   PRODUCT_ID,
@@ -11,7 +13,7 @@ import {
   tokenHash,
 } from './revocations.js';
 
-const MAX_REQUEST_BYTES = 8192;
+const MAX_REQUEST_BYTES = 32768;
 
 function json(status, value) {
   return new Response(JSON.stringify(value), {
@@ -22,6 +24,12 @@ function json(status, value) {
       'X-Content-Type-Options': 'nosniff',
     },
   });
+}
+
+function rateLimited() {
+  const response = json(429, { status: 'unavailable' });
+  response.headers.set('Retry-After', '60');
+  return response;
 }
 
 async function readBoundedJson(request) {
@@ -62,7 +70,12 @@ function validPayload(body) {
     body.productId === PRODUCT_ID &&
     typeof body.purchaseToken === 'string' &&
     body.purchaseToken.length >= 8 &&
-    body.purchaseToken.length <= 4096;
+    body.purchaseToken.length <= 4096 &&
+    typeof body.requestId === 'string' &&
+    /^[a-f0-9]{32}$/.test(body.requestId) &&
+    typeof body.integrityToken === 'string' &&
+    body.integrityToken.length > 0 &&
+    body.integrityToken.length <= 16384;
 }
 
 /**
@@ -84,15 +97,28 @@ export async function handleRequest(request, env, {
   if (url.pathname !== '/verify') return json(404, { error: 'not_found' });
   if (request.method !== 'POST') return json(405, { error: 'method_not_allowed' });
 
-  const payload = await readBoundedJson(request);
-  if (!validPayload(payload)) {
-    return json(400, { error: 'invalid_purchase_request' });
-  }
-
   try {
+    // First check the edge-provided client address, before parsing bodies or
+    // consuming Google Play API quota. Never read X-Forwarded-For.
+    if (!await allowVerifyIp(env, request)) return rateLimited();
+
+    const payload = await readBoundedJson(request);
+    if (!validPayload(payload)) {
+      return json(400, { error: 'invalid_purchase_request' });
+    }
     const hash = await tokenHash(payload.purchaseToken);
+    // Second check: throttle attempts using the same purchase token,
+    // independent of the caller's address.
+    if (!await allowVerifyToken(env, hash)) return rateLimited();
     const revoked = await checkRevocation(env.ENTITLEMENTS_DB, hash, now());
     if (revoked) return json(200, { status: 'rejected' });
+
+    const integrityAccessToken = await getAccessToken(env, {
+      fetchImpl, now, scope: INTEGRITY_SCOPE,
+    });
+    if (!await verifyPlayIntegrity(payload, hash, integrityAccessToken, { fetchImpl, now })) {
+      return json(503, { status: 'unavailable' });
+    }
 
     const accessToken = await getAccessToken(env, { fetchImpl, now });
     const status = await lookupGooglePurchase(

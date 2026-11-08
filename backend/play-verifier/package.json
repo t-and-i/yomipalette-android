@@ -5,6 +5,6 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "check": "node --check src/worker.js && node --check src/oauth.js && node --check src/revocations.js && node --check src/play-api.js && node --check src/pubsub-auth.js && node --check src/rtdn.js"
+    "check": "node --check src/worker.js && node --check src/play-integrity.js && node --check src/oauth.js && node --check src/revocations.js && node --check src/play-api.js && node --check src/pubsub-auth.js && node --check src/rtdn.js && node --check src/rate-limits.js"
   }
 }

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -22,6 +23,7 @@ void main() {
   final url = Uri.parse('https://example.test/verify');
 
   test('backend verifies matching purchase and package ID', () async {
+    final hashes = <String>[];
     final client = MockClient((request) async {
       expect(request.method, 'POST');
       expect(request.url, url);
@@ -29,13 +31,40 @@ void main() {
       expect(body['purchaseToken'], 'sample-token');
       expect(body['productId'], 'remove_ads');
       expect(body['packageName'], billingPackageName);
+      expect(body['integrityToken'], 'mock-integrity-token');
+      expect(body['requestId'], matches(r'^[a-f0-9]{32}$'));
+      final expected = sha256.convert(
+        utf8.encode(
+          jsonEncode([
+            'yomipalette:/verify:v1',
+            billingPackageName,
+            'remove_ads',
+            sha256.convert(utf8.encode('sample-token')).toString(),
+            body['requestId'],
+          ]),
+        ),
+      );
+      expect(hashes.last, expected.toString());
       return http.Response('{"status":"verified"}', 200);
     });
-    final verifier = BackendPurchaseVerifier(endpoint: url, client: client);
+    final verifier = BackendPurchaseVerifier(
+      endpoint: url,
+      client: client,
+      integrityToken: (hash) async {
+        hashes.add(hash);
+        return 'mock-integrity-token';
+      },
+    );
     expect(
       await verifier.verify(purchase()),
       PurchaseVerificationResult.verified,
     );
+    final restored = purchase()..status = PurchaseStatus.restored;
+    expect(
+      await verifier.verify(restored),
+      PurchaseVerificationResult.verified,
+    );
+    expect(hashes.toSet(), hasLength(2));
     verifier.dispose();
     client.close();
   });
@@ -43,6 +72,7 @@ void main() {
   test('backend rejection removes entitlement', () async {
     final verifier = BackendPurchaseVerifier(
       endpoint: url,
+      integrityToken: (_) async => 'mock-integrity-token',
       client: MockClient(
         (request) async => http.Response('{"status":"rejected"}', 200),
       ),
@@ -62,6 +92,7 @@ void main() {
     ]) {
       final verifier = BackendPurchaseVerifier(
         endpoint: url,
+        integrityToken: (_) async => 'mock-integrity-token',
         client: MockClient((_) async => response),
       );
       expect(
@@ -84,6 +115,21 @@ void main() {
       PurchaseVerificationResult.rejected,
     );
     verifier.dispose();
+  });
+
+  test('missing integrity proof prevents purchase verification HTTP', () async {
+    final client = MockClient((_) async => fail('Must not send without proof'));
+    final verifier = BackendPurchaseVerifier(
+      endpoint: url,
+      client: client,
+      integrityToken: (_) async => null,
+    );
+    expect(
+      await verifier.verify(purchase()),
+      PurchaseVerificationResult.unavailable,
+    );
+    verifier.dispose();
+    client.close();
   });
 
   test('non-HTTPS verifier endpoint is forbidden', () {

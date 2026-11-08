@@ -1,6 +1,10 @@
 import 'dart:convert';
+import 'dart:math';
+
+import 'package:crypto/crypto.dart';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:in_app_purchase/in_app_purchase.dart';
 
@@ -13,6 +17,18 @@ const bool billingQaMode = bool.fromEnvironment(
 const String billingVerificationUrl = String.fromEnvironment(
   'YOMIPALETTE_BILLING_VERIFY_URL',
 );
+
+const String playIntegrityProjectNumber = String.fromEnvironment(
+  'YOMIPALETTE_PLAY_INTEGRITY_PROJECT_NUMBER',
+);
+
+const _integrityChannel = MethodChannel('tts_text_mp3/play_integrity');
+
+Future<String?> _requestIntegrityToken(String requestHash) =>
+    _integrityChannel.invokeMethod<String>('requestToken', {
+      'cloudProjectNumber': playIntegrityProjectNumber,
+      'requestHash': requestHash,
+    });
 
 const String billingPackageName = 'com.tjsongwei.tts_text_mp3_mobile';
 
@@ -51,21 +67,26 @@ class UnconfiguredPurchaseVerifier implements PurchaseVerifier {
 
 /// Calls a trusted backend which independently checks the purchase token
 /// against the Google Play Developer API. The server MUST verify package ID,
-/// product ID, PURCHASED state, cancellation/refunds and token reuse.
+/// product ID, PURCHASED state, cancellation/refunds and request integrity.
 ///
 /// Do not embed a Google Play service account or other API secrets in the app.
 /// HTTP and invalid/unexpected responses fail closed.
 class BackendPurchaseVerifier implements PurchaseVerifier {
-  BackendPurchaseVerifier({required Uri endpoint, http.Client? client})
-    : _endpoint = endpoint,
-      _client = client ?? http.Client(),
-      _ownsClient = client == null {
+  BackendPurchaseVerifier({
+    required Uri endpoint,
+    http.Client? client,
+    Future<String?> Function(String requestHash)? integrityToken,
+  }) : _endpoint = endpoint,
+       _integrityToken = integrityToken ?? _requestIntegrityToken,
+       _client = client ?? http.Client(),
+       _ownsClient = client == null {
     if (endpoint.scheme != 'https' || endpoint.host.isEmpty) {
       throw ArgumentError('Purchase verification requires an HTTPS endpoint.');
     }
   }
 
   final Uri _endpoint;
+  final Future<String?> Function(String) _integrityToken;
   final http.Client _client;
   final bool _ownsClient;
 
@@ -74,6 +95,31 @@ class BackendPurchaseVerifier implements PurchaseVerifier {
     final token = purchase.verificationData.serverVerificationData;
     if (token.isEmpty) return PurchaseVerificationResult.rejected;
     try {
+      final random = Random.secure();
+      final requestId = List.generate(
+        16,
+        (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+      ).join();
+      // The Worker computes this same versioned digest from the received fields.
+      final requestHash = sha256
+          .convert(
+            utf8.encode(
+              jsonEncode([
+                'yomipalette:/verify:v1',
+                billingPackageName,
+                purchase.productID,
+                sha256.convert(utf8.encode(token)).toString(),
+                requestId,
+              ]),
+            ),
+          )
+          .toString();
+      final integrityToken = await _integrityToken(requestHash)
+          .timeout(const Duration(seconds: 60));
+      if (integrityToken == null || integrityToken.isEmpty) {
+        return PurchaseVerificationResult.unavailable;
+      }
+
       final response = await _client
           .post(
             _endpoint,
@@ -82,9 +128,11 @@ class BackendPurchaseVerifier implements PurchaseVerifier {
               'packageName': billingPackageName,
               'productId': purchase.productID,
               'purchaseToken': token,
+              'requestId': requestId,
+              'integrityToken': integrityToken,
             }),
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 40));
       if (response.statusCode != 200) {
         return PurchaseVerificationResult.unavailable;
       }
@@ -110,7 +158,8 @@ class BackendPurchaseVerifier implements PurchaseVerifier {
 
 PurchaseVerifier createPurchaseVerifier() {
   if (billingQaMode) return const QaPurchaseVerifier();
-  if (billingVerificationUrl.isEmpty) {
+  if (billingVerificationUrl.isEmpty ||
+      (int.tryParse(playIntegrityProjectNumber) ?? 0) <= 0) {
     return const UnconfiguredPurchaseVerifier();
   }
   final uri = Uri.tryParse(billingVerificationUrl);

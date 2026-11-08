@@ -18,7 +18,7 @@ function pkcs8FromPem(pem) {
   return Uint8Array.from(atob(value), (character) => character.charCodeAt(0));
 }
 
-export async function createAssertion(account, currentMs = Date.now()) {
+export async function createAssertion(account, currentMs = Date.now(), scope = GOOGLE_SCOPE) {
   if (
     !account ||
     typeof account.client_email !== 'string' ||
@@ -40,7 +40,7 @@ export async function createAssertion(account, currentMs = Date.now()) {
   })));
   const payload = base64url(new TextEncoder().encode(JSON.stringify({
     iss: account.client_email,
-    scope: GOOGLE_SCOPE,
+    scope,
     aud: GOOGLE_TOKEN_ENDPOINT,
     iat: now,
     exp: now + 3600,
@@ -58,6 +58,7 @@ export async function createAssertion(account, currentMs = Date.now()) {
 export async function getPlayAccessToken(env, {
   fetchImpl = fetch,
   now = Date.now,
+  scope = GOOGLE_SCOPE,
 } = {}) {
   const secretBinding = env?.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON;
   if (!secretBinding) {
@@ -84,7 +85,7 @@ export async function getPlayAccessToken(env, {
   } catch {
     throw new Error('Service account secret is not valid JSON.');
   }
-  const assertion = await createAssertion(account, now());
+  const assertion = await createAssertion(account, now(), scope);
   const response = await fetchImpl(GOOGLE_TOKEN_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

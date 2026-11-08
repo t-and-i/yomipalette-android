@@ -6,6 +6,7 @@ import { PACKAGE_NAME, PRODUCT_ID } from '../src/play-api.js';
 import { tokenHash } from '../src/revocations.js';
 
 const NOW = Date.parse('2026-11-04T00:00:00.000Z');
+const REQUEST_ID = 'a'.repeat(32);
 const TOKEN = 'valid-purchase-test-token-123456';
 
 class FakeD1 {
@@ -69,17 +70,38 @@ function request(data = {}) {
       packageName: PACKAGE_NAME,
       productId: PRODUCT_ID,
       purchaseToken: TOKEN,
+      requestId: REQUEST_ID,
+      integrityToken: 'mock-integrity-token',
       ...data,
     }),
   });
 }
 
-function setup({ db = new FakeD1(), googleBody = purchase(), googleStatus = 200 } = {}) {
+function setup({ db = new FakeD1(), googleBody = purchase(), googleStatus = 200, changeVerdict = (value) => value, decodeStatus = 200 } = {}) {
   let calls = 0;
   const dependencies = {
     now: () => NOW,
-    getAccessToken: async () => 'test-only-access-token',
+    getAccessToken: async (_env, { scope }) => {
+      if (!scope) return 'test-only-access-token';
+      assert.equal(scope, 'https://www.googleapis.com/auth/playintegrity');
+      return 'test-integrity-access-token';
+    },
     fetchImpl: async (url, options) => {
+      if (String(url).endsWith(':decodeIntegrityToken')) {
+        assert.equal(url, 'https://playintegrity.googleapis.com/v1/' + PACKAGE_NAME + ':decodeIntegrityToken');
+        assert.equal(options.method, 'POST');
+        assert.equal(options.headers.Authorization, 'Bearer test-integrity-access-token');
+        assert.deepEqual(JSON.parse(options.body), { integrity_token: 'mock-integrity-token' });
+        const requestHash = await tokenHash(JSON.stringify([
+          'yomipalette:/verify:v1', PACKAGE_NAME, PRODUCT_ID, await tokenHash(TOKEN), REQUEST_ID,
+        ]));
+        return Response.json({ tokenPayloadExternal: changeVerdict({
+          requestDetails: { requestPackageName: PACKAGE_NAME, requestHash, timestampMillis: String(NOW) },
+          appIntegrity: { appRecognitionVerdict: 'PLAY_RECOGNIZED', packageName: PACKAGE_NAME },
+          accountDetails: { appLicensingVerdict: 'LICENSED' },
+          deviceIntegrity: { deviceRecognitionVerdict: ['MEETS_DEVICE_INTEGRITY'] },
+        }) }, { status: decodeStatus });
+      }
       calls++;
       assert.match(String(url), /productsv2\/tokens\//);
       assert.match(options.headers.Authorization, /^Bearer /);
@@ -87,7 +109,11 @@ function setup({ db = new FakeD1(), googleBody = purchase(), googleStatus = 200 
     },
   };
   return {
-    env: { ENTITLEMENTS_DB: db },
+    env: {
+      ENTITLEMENTS_DB: db,
+      VERIFY_IP_RATE_LIMIT: { limit: async () => ({ success: true }) },
+      VERIFY_TOKEN_RATE_LIMIT: { limit: async () => ({ success: true }) },
+    },
     dependencies,
     get calls() { return calls; },
   };
@@ -108,10 +134,41 @@ test('invalid package/product fails before Google API call', async () => {
     { packageName: 'fake.package' },
     { productId: 'other_product' },
     { purchaseToken: 'short' },
+    { integrityToken: undefined },
+    { requestId: 'invalid' },
   ]) {
     const res = await handleRequest(request(data), ctx.env, ctx.dependencies);
     assert.equal(res.status, 400);
   }
+  assert.equal(ctx.calls, 0);
+});
+
+test('integrity blocks tampering, stale proofs and empty replay verdicts before billing', async () => {
+  const cases = [
+    [{ purchaseToken: TOKEN + '-modified' }],
+    [{ requestId: 'b'.repeat(32) }],
+    [{}, (verdict) => ({ ...verdict, requestDetails: {
+      ...verdict.requestDetails, timestampMillis: String(NOW - 121_000),
+    } })],
+    [{}, (verdict) => ({ ...verdict, requestDetails: {
+      ...verdict.requestDetails, requestPackageName: 'wrong.package',
+    } })],
+    [{}, (verdict) => ({ ...verdict, appIntegrity: {
+      ...verdict.appIntegrity, appRecognitionVerdict: 'UNRECOGNIZED_VERSION',
+    } })],
+    [{}, (verdict) => ({ requestDetails: verdict.requestDetails })],
+    [{}, (verdict) => ({ ...verdict, accountDetails: { appLicensingVerdict: 'UNEVALUATED' } })],
+    [{}, (verdict) => ({ ...verdict, deviceIntegrity: {} })],
+  ];
+  for (const [data, changeVerdict] of cases) {
+    const ctx = setup({ changeVerdict });
+    const res = await handleRequest(request(data), ctx.env, ctx.dependencies);
+    assert.equal(res.status, 503);
+    assert.deepEqual(await res.json(), { status: 'unavailable' });
+    assert.equal(ctx.calls, 0);
+  }
+  const ctx = setup({ decodeStatus: 429 });
+  assert.equal((await handleRequest(request(), ctx.env, ctx.dependencies)).status, 503);
   assert.equal(ctx.calls, 0);
 });
 
