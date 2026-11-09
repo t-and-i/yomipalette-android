@@ -54,10 +54,10 @@ Google 401・403・429・5xxを**購入拒否と誤判定せず**通信不能と
 - 専用D1: `yomipalette-play-entitlements-staging`（ID: `bb5bfaab-3401-445d-ab8c-127f4ca7aec2`）。`revoked_purchase_tokens` と `sync_state` の空テーブルを作成済み。本番DBとは分離。
 - ステージング固有のRate Limiting namespaceは `7923101` と `7923102`。本番設定のカウンタと共有しません。
 - 既存のSecrets Storeの `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` Bindingを再利用します。**秘密鍵のコピーや値の表示は行いません**。この認証情報は実際のGoogle APIを呼び出せるため、アクセス公開前にレビューが必要です。
-- `workers_dev: false` / `preview_urls: false` はCloudflare管理APIで無効を確認済み。Custom Domain `yp-verify-stg.tiaozheng.dpdns.org` は設定・DNS・HTTPS疎通確認済み。Pub/Sub Pushは未接続。
+- `workers_dev: false` / `preview_urls: false` はCloudflare管理APIで無効を確認済み。Custom Domain `yp-verify-stg.tiaozheng.dpdns.org` は設定・DNS・HTTPS疎通確認済み。Pub/Sub OIDC認証付きPushもテスト通知で受信確認済み。
 - Cron: `0 */6 * * *`（UTC、JSTでは毎日03:00・09:00・15:00・21:00）。ステージング専用D1に対して6時間ごとにGoogle Play Voided Purchases APIを照会します。Cron配備後、Cloudflare管理APIでも登録を確認済みです。
 - D1初回同期は2026-11-08 23:18:30 JSTに成功。2026-11-09 09:00:05 JSTの自動同期更新も確認済み。返金トークン0件。引き続き `sync_state` とWorkerログを監視し、12時間以上同期状態が古くなると `/verify` が503を返す点に注意してください。
-- Workerに `RTDN_OIDC_AUDIENCE` 等はまだ設定していません。公開された `POST /rtdn` は設定未完了のため503を返し、通知は処理しません。認証付きPub/Subサブスクリプションは未作成です。
+- 2026-11-09にステージングWorkerへ `RTDN_OIDC_AUDIENCE`、`RTDN_PUSH_SERVICE_ACCOUNT_EMAIL`、`RTDN_PUBSUB_SUBSCRIPTION` を設定・デプロイ済み（Version: `5160906d-264a-4bf6-b030-4fa9d4369672`）。Cloudflare管理APIで設定値を照合済み。`POST /rtdn` は未認証で401、Google Play Consoleのテスト通知では204を返しました。Google Cloud側の認証付きPushサブスクリプションも作成済みです。
 - デプロイコマンドでは必ず `--config wrangler.staging.jsonc` を明示し、初期設定と差分を再確認してください。検証のみであれば以下です。
 
 ```powershell
@@ -65,7 +65,27 @@ cd C:\CodexWorkspace\yomipalette-android\backend\play-verifier
 npx wrangler@4.157.0 deploy --dry-run --config wrangler.staging.jsonc
 ```
 
-ステージングAPI: `https://yp-verify-stg.tiaozheng.dpdns.org/verify`。2026-11-09にTLSで疎通を確認し、`GET /verify` は405、無効なJSONの `POST /verify` は400、未設定の `POST /rtdn` は503を返しました。これは入口の拒否動作の確認であり、**正規のGoogle Play購入・Play Integrityトークンを使ったエンドツーエンド検証は未実施**です。正式にアプリから使用する前に、購入者トークンの悪用リスク、RTDN認証、監視を確認してください。本番の`wrangler.jsonc`ではデプロイしないでください。
+ステージングAPI: `https://yp-verify-stg.tiaozheng.dpdns.org/verify`。2026-11-09にTLSで疎通を確認し、`GET /verify` は405、無効なJSONの `POST /verify` は400を返しました。`POST /rtdn` はOIDC設定前に503、設定後の未認証アクセスに401、Google Play Console発の認証付きテスト通知に204を返しました。**正規のGoogle Play購入・Play Integrityトークンを使ったエンドツーエンド検証は未実施**です。正式にアプリから使用する前に、購入者トークンの悪用リスクと監視を確認してください。本番の`wrangler.jsonc`ではデプロイしないでください。
+
+## ステージングRTDN Pushサブスクリプション（Google Cloud側作成・テスト受信済み）
+
+Cloudflare Worker側は以下の設定でデプロイ済み。**下記の値は公開設定であり、秘密鍵ではありません**。
+
+| 設定 | 値 |
+| --- | --- |
+| Google Cloudプロジェクト | `tts-text-mp3`（番号 `22173932202`） |
+| 既存トピック | `projects/tts-text-mp3/topics/yomipalette-rtdn` |
+| サブスクリプションID | `yomipalette-rtdn-staging-push` |
+| プッシュエンドポイント | `https://yp-verify-stg.tiaozheng.dpdns.org/rtdn` |
+| OIDC Audience | `https://yp-verify-stg.tiaozheng.dpdns.org/rtdn`（末尾スラッシュなし） |
+| OIDCサービスアカウント | `yomipalette-rtdn-push@tts-text-mp3.iam.gserviceaccount.com` |
+| Workerが照合するサブスクリプション | `projects/tts-text-mp3/subscriptions/yomipalette-rtdn-staging-push` |
+
+再構築時の手順: Cloud Consoleの **Pub/Sub → サブスクリプション → 作成** で上記のトピックとIDを指定し、配送タイプ **Push** を選択。エンドポイントを入力し、**認証を有効にする** で上記サービスアカウント・Audienceを指定します。**ペイロードのラップ解除は無効**（Pub/Sub標準JSONエンベロープ必須）。再試行には指数バックオフを推奨します。
+
+Pushサービスアカウントに対して、Pub/Subサービスエージェント `service-22173932202@gcp-sa-pubsub.iam.gserviceaccount.com` が `iam.serviceAccounts.getOpenIdToken` を使用できる必要があります。すでにサービスエージェント権限がある場合は追加不要です。足りない場合のみ、**対象Pushサービスアカウントに限定して**`roles/iam.serviceAccountOpenIdTokenCreator`など必要最小限の権限を付与してください。サブスクリプションを作成する主体にも、そのPushサービスアカウントに対する`iam.serviceAccounts.actAs`が必要です。
+
+2026-11-09 23:37:43 JST、Google Play Consoleからテスト通知を送信し、Cloudflare Workers ObservabilityログでGoogle送信元の `POST /rtdn`、HTTP **204 No Content**、Worker outcome **ok**（約70ms）を確認しました。これにより、署名付きOIDC、Audience、送信元サービスアカウント、サブスクリプション照合とテスト通知処理の成功を確認済みです。なお、購入・返金などの実イベントは未検証であり、本番環境の設定は変更していません。
 
 ## ローカル単体テスト
 
