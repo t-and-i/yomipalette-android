@@ -1,0 +1,7 @@
+node_modules/
+.dev.vars*
+wrangler.jsonc
+wrangler.staging.jsonc
+.wrangler/
+.env
+.env.*

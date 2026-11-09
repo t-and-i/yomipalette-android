@@ -3,7 +3,8 @@ param(
     [string]$SigningProperties = (Join-Path $env:USERPROFILE '.android\yomipalette-signing\key.properties'),
     [string]$JavaBin = 'C:\Program Files\Android\Android Studio\jbr\bin',
     [switch]$InternalTestAds,
-    [string]$PurchaseVerifierUrl = $env:YOMIPALETTE_BILLING_VERIFY_URL
+    [string]$PurchaseVerifierUrl = $env:YOMIPALETTE_BILLING_VERIFY_URL,
+    [string]$IntegrityProjectNumber = $env:YOMIPALETTE_PLAY_INTEGRITY_PROJECT_NUMBER
 )
 $ErrorActionPreference = 'Stop'
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -36,6 +37,12 @@ try {
             $PurchaseVerifierUrl -notmatch '^https://[^/]+') {
             throw 'Production AAB blocked: configure an HTTPS purchase verification backend via -PurchaseVerifierUrl. Use -InternalTestAds only for internal QA.'
         }
+        $projectNumber = 0L
+        if ($IntegrityProjectNumber -notmatch '^[0-9]+$' -or
+            ![long]::TryParse($IntegrityProjectNumber, [ref]$projectNumber) -or $projectNumber -le 0) {
+            throw 'Production AAB blocked: configure the linked Google Cloud project number via -IntegrityProjectNumber.'
+        }
+        $flutterArgs += "--dart-define=YOMIPALETTE_PLAY_INTEGRITY_PROJECT_NUMBER=$projectNumber"
         $flutterArgs += "--dart-define=YOMIPALETTE_BILLING_VERIFY_URL=$PurchaseVerifierUrl"
     }
     & flutter @flutterArgs

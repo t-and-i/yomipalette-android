@@ -1,0 +1,29 @@
+name: Verify Play purchase backend
+
+on:
+  pull_request:
+    paths:
+      - 'backend/play-verifier/**'
+      - '.github/workflows/play-verifier.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/play-verifier/**'
+      - '.github/workflows/play-verifier.yml'
+
+jobs:
+  backend-tests:
+    name: Check purchase backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/play-verifier
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Syntax check
+        run: npm run check
+      - name: Offline backend tests
+        run: npm test
