@@ -94,6 +94,54 @@ void main() {
     expect(prefs.getString('theme_mode'), 'system');
   });
 
+  testWidgets('selected app language is restored after restart', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const TtsMobileApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('English'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('日本語').last);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).locale,
+      const Locale('ja'),
+    );
+    var prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('app_locale'), 'ja');
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(const TtsMobileApp());
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).locale,
+      const Locale('ja'),
+    );
+    expect(find.text('日本語'), findsOneWidget);
+
+    await tester.tap(find.text('日本語'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('简体中文').last);
+    await tester.pumpAndSettle();
+    prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('app_locale'), 'zh');
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).locale,
+      const Locale('zh'),
+    );
+  });
+
+  testWidgets('unsupported saved app locale uses device language', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({'app_locale': 'invalid'});
+    await tester.pumpWidget(const TtsMobileApp());
+    await tester.pumpAndSettle();
+    expect(tester.widget<MaterialApp>(find.byType(MaterialApp)).locale, isNull);
+  });
+
   testWidgets('saved dark mode is restored on app startup', (tester) async {
     SharedPreferences.setMockInitialValues({'theme_mode': 'dark'});
     await tester.pumpWidget(const TtsMobileApp());

@@ -1,9 +1,14 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tts_text_mp3_mobile/screens/home_screen.dart';
 import 'package:tts_text_mp3_mobile/services/ad_free_purchase.dart';
+import 'package:tts_text_mp3_mobile/widgets/ad_free_section.dart';
 import 'package:tts_text_mp3_mobile/services/purchase_verifier.dart';
 
 class FakeBilling implements AdFreeBillingGateway {
@@ -114,6 +119,50 @@ void main() {
     expect(fake.restored, 1);
     controller.dispose();
     await fake.controller.close();
+  });
+
+  testWidgets('verified buyers do not see the ad-free purchase section', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    FlutterSecureStorage.setMockInitialValues({});
+    final fake = FakeBilling();
+    final controller = AdFreePurchaseController(
+      gateway: fake,
+      verifier: FakeVerifier(PurchaseVerificationResult.verified),
+    );
+    await controller.initialize();
+
+    Widget screen() => MaterialApp(
+      home: HomeScreen(onLocaleChanged: (_) {}, adFreeController: controller),
+    );
+    await tester.pumpWidget(screen());
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Remove ads (one-time purchase)'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.byType(AdFreeSection), findsOneWidget);
+
+    await controller.handleUpdates([record(PurchaseStatus.purchased)]);
+    expect(controller.isAdFree, isTrue);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(screen());
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Appearance'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.byType(AdFreeSection), findsNothing);
+    expect(find.text('Restore purchases'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    controller.dispose();
+    await fake.controller.close();
+    debugDefaultTargetPlatformOverride = null;
   });
 
   test('pending purchase does not remove ads', () async {

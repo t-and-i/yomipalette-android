@@ -35,6 +35,7 @@ class TtsMobileApp extends StatefulWidget {
 
 class _TtsMobileAppState extends State<TtsMobileApp> {
   Locale? locale;
+  bool _localeChangedDuringRestore = false;
   ThemeMode _themeMode = ThemeMode.system;
   bool _themeChangedDuringRestore = false;
   late final AdFreePurchaseController _adFreeController;
@@ -48,6 +49,7 @@ class _TtsMobileAppState extends State<TtsMobileApp> {
       unawaited(_adFreeController.initialize());
     }
     unawaited(_restoreThemeMode());
+    unawaited(_restoreLocale());
   }
 
   void _onPurchaseChanged() {
@@ -72,6 +74,31 @@ class _TtsMobileAppState extends State<TtsMobileApp> {
         _ => ThemeMode.system,
       },
     );
+  }
+
+  Future<void> _restoreLocale() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('app_locale');
+    if (!mounted || _localeChangedDuringRestore) return;
+    setState(() {
+      locale =
+          AppStrings.supportedLocales.any(
+            (supported) => supported.languageCode == saved,
+          )
+          ? Locale(saved!)
+          : null;
+    });
+  }
+
+  void _changeLocale(Locale value) {
+    _localeChangedDuringRestore = true;
+    setState(() => locale = value);
+    unawaited(_saveLocale(value));
+  }
+
+  Future<void> _saveLocale(Locale value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('app_locale', value.languageCode);
   }
 
   void _changeThemeMode(ThemeMode mode) {
@@ -112,7 +139,7 @@ class _TtsMobileAppState extends State<TtsMobileApp> {
     ),
     themeMode: _themeMode,
     home: HomeScreen(
-      onLocaleChanged: (value) => setState(() => locale = value),
+      onLocaleChanged: _changeLocale,
       themeMode: _themeMode,
       onThemeModeChanged: _changeThemeMode,
       adFreeController: _adFreeController,

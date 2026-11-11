@@ -891,7 +891,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
           if (widget.adFreeController != null &&
               !kIsWeb &&
-              defaultTargetPlatform == TargetPlatform.android)
+              defaultTargetPlatform == TargetPlatform.android &&
+              !widget.adFreeController!.isAdFree)
             AdFreeSection(purchase: widget.adFreeController!, strings: s),
           const Divider(height: 32),
           Text(
