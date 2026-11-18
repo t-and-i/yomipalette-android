@@ -4,19 +4,20 @@
 
 - アプリ: YomiPalette / Android
 - Package name: `com.tjsongwei.tts_text_mp3_mobile`
-- 商品ID: `remove_ads`（コードと完全一致）
-- 種類: 非消費型・買い切り（永久広告解除）
-- 日本の価格: 500円（Play Consoleで設定）
+- 新商品ID: `full_access`（買い切り・永久利用権）
+- 旧商品ID: `remove_ads`（既存購入者の復元用）
+- 種類: 非消費型・買い切り（初回30日は無料、その後に手動購入で永久利用権。自動課金なし）
+- 日本の予定価格: 500円（Play Consoleで新商品に設定）
 - アプリ内の購入価格はGoogle Playから取得した金額を表示
 
-Play Consoleの「収益化」→「商品」→「アプリ内商品」または「1回限りの商品」で商品を登録し、有効化してください。商品未登録時はアプリ内の購入ボタンが無効になります。
+Play Consoleの「収益化」→「商品」→「アプリ内商品」または「1回限りの商品」で商品を登録し、有効化してください。新商品 `full_access` が未登録または無効の場合、購入ボタンは使用できません。既存 `remove_ads` 購入の復元は引き続き必要です。
 
 ## 内部テスト
 
 1. Play Consoleのライセンステスターにテスト用Googleアカウントを登録
 2. 内部テストに署名済みAABをアップロードし、テストユーザーに参加してもらう
 3. ライセンステスターの端末でGoogle Playからインストールする
-4. 購入・購入キャンセル・保留中・購入復元・再起動後の広告解除状態をテスト
+4. 購入・購入キャンセル・保留中・購入復元・再起動後の利用権状態をテスト
 5. 別端末でも同じGoogleアカウントから復元できるか確認
 
 **テストトラックでも、ライセンステスター以外は実際の請求が発生する場合があります。**
@@ -24,10 +25,10 @@ Play Consoleの「収益化」→「商品」→「アプリ内商品」また�
 ## Phase 1：購入処理の安全性と残るバックエンド作業
 
 - 購入イベントは受信順に直列処理。重複通知は同じ購入トークンの二重 acknowledge を避けます。
-- アプリは新しい購入だけでなく「復元」時も検証サービスに問い合わせます。明示的な `verified` 応答の場合のみ広告解除を許可し、`rejected` なら権利を失効させ、通信エラー時は新たな権利を付与しません。
+- アプリは新しい購入だけでなく「復元」時も検証サービスに問い合わせます。明示的な `verified` 応答の場合のみ利用権を許可し、`rejected` なら権利を失効させ、通信エラー時は新たな権利を付与しません。
 - **本番版では旧 `ad_free_owned_v1` ローカルフラグを信用しません。** 検証バックエンドがない場合、購入ボタンは無効です。
-- **バックエンド未構築**：Google Play Developer API認証、RTDN（リアルタイム通知）、Voided Purchases APIでの返金・取り消し監視と安全なオフライン権利キャッシュは引き続き必要です。
-- 既存の購入者には起動後の復元・検証が必要です。ネットワーク障害時に広告解除を維持するには、短期有効な署名付き権利トークン等を追加する必要があります。
+- **本番購入検証未完了**：CloudflareステージングにはPlay Integrity、RTDN、Voided Purchases API連携がありますが、新商品と旧商品の実購入・返金・復元の総合検証、および署名付きオフライン権利キャッシュは引き続き必要です。
+- 既存の購入者には起動後の復元・検証が必要です。ネットワーク障害時に利用権を維持するには、短期有効な署名付き権利トークン等を追加する必要があります。
 
 ### アプリと検証バックエンド間のAPI契約
 
@@ -42,8 +43,10 @@ scripts/build-play.ps1 -PurchaseVerifierUrl https://example.com/verify
 ```json
 {
   "packageName": "com.tjsongwei.tts_text_mp3_mobile",
-  "productId": "remove_ads",
-  "purchaseToken": "<Google Play purchase token>"
+  "productId": "full_access",
+  "purchaseToken": "<Google Play purchase token>",
+  "requestId": "<32 lowercase hex characters>",
+  "integrityToken": "<Play Integrity Standard token>"
 }
 ```
 
@@ -54,10 +57,10 @@ scripts/build-play.ps1 -PurchaseVerifierUrl https://example.com/verify
 ### 内部テスト専用のビルド
 
 ```powershell
-.\scripts\build-play.ps1 -InternalTestAds
+.\scripts\build-play.ps1 -InternalTestBilling
 ```
 
-このスイッチは **Googleサンプル広告**、**広告診断ログ**、**未検証レシートによるライセンステスト（QAのみ）** を有効にします。製品版トラックへの昇格は禁止です。Google Playに新しいAABをアップロードするときはversionCodeが未使用であることを確認してください。通常の `build-play.ps1` は検証バックエンドURLが未設定なら明示的に失敗します。
+このスイッチは **未検証レシートによるライセンステスト（QAのみ）** を有効にします。製品版トラックへの昇格は禁止です。Google Playに新しいAABをアップロードするときはversionCodeが未使用であることを確認してください。通常の `build-play.ps1` は検証バックエンドURLが未設定なら明示的に失敗します。
 
 プライバシーポリシー https://t-and-i.biz/yomipalette/privacy/ にGoogle Play Billingと購入トークンの処理を反映し、データセーフティを最終確認してください。
 

@@ -19,12 +19,13 @@ import '../providers/tts_provider.dart';
 import '../services/audio_generator.dart';
 import '../services/audio_generation_cancellation.dart';
 import '../services/ad_free_purchase.dart';
+import '../services/trial_access.dart';
 import '../services/document_reader.dart';
 import '../services/output_directory_service.dart';
 import '../services/pdf_reader.dart';
 import '../services/preview_audio_player.dart';
 import '../screens/app_information_screen.dart';
-import '../widgets/ad_free_section.dart';
+import '../widgets/access_purchase_section.dart';
 import '../widgets/audio_adjustment_slider.dart';
 import '../widgets/generation_actions.dart';
 import '../widgets/output_units_section.dart';
@@ -36,6 +37,7 @@ class HomeScreen extends StatefulWidget {
     this.themeMode = ThemeMode.system,
     this.onThemeModeChanged,
     this.adFreeController,
+    this.trialController,
     this.previewPlayer,
     this.externalLinkLauncher,
     this.initialChapters = const [],
@@ -45,6 +47,7 @@ class HomeScreen extends StatefulWidget {
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode>? onThemeModeChanged;
   final AdFreePurchaseController? adFreeController;
+  final TrialAccessController? trialController;
   final PreviewAudioPlayer? previewPlayer;
   final ExternalLinkLauncher? externalLinkLauncher;
   final List<Chapter> initialChapters;
@@ -357,7 +360,24 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_tts.deviceTtsEngine != null) await _loadVoices();
   }
 
+  bool get _canUse =>
+      widget.trialController == null ||
+      widget.adFreeController?.isLicensed == true ||
+      widget.trialController!.isActive;
+
+  Future<bool> _ensureAccess() async {
+    if (widget.trialController == null) return true;
+    await widget.trialController!.refresh();
+    if (_canUse) return true;
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(s.get('trialExpired'))));
+    }
+    return false;
+  }
+
   Future<void> _preview() async {
+    if (!await _ensureAccess()) return;
     if (_document.chapters.isEmpty) return _showError(s.get('noFile'));
     await _run(() async {
       final units = _units;
@@ -400,6 +420,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _generate({bool resume = false}) async {
+    if (!await _ensureAccess()) return;
     if (_document.chapters.isEmpty) return _showError(s.get('noFile'));
     _audio.prepareGeneration();
     setState(() => _isGenerating = true);
@@ -892,8 +913,12 @@ class _HomeScreenState extends State<HomeScreen> {
           if (widget.adFreeController != null &&
               !kIsWeb &&
               defaultTargetPlatform == TargetPlatform.android &&
-              !widget.adFreeController!.isAdFree)
-            AdFreeSection(purchase: widget.adFreeController!, strings: s),
+              _canUse)
+            AccessPurchaseSection(
+              purchase: widget.adFreeController!,
+              trial: widget.trialController,
+              strings: s,
+            ),
           const Divider(height: 32),
           Text(
             s.get('appearance'),
@@ -972,25 +997,32 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
         ],
       ),
-      bottomNavigationBar: GenerationActions(
-        strings: s,
-        busy: _busy,
-        generating: _isGenerating && _audio.canCancel,
-        previewPlaying: _isPreviewPlaying,
-        showProgress: _tts.ttsShowProgress,
-        status: _status,
-        showBanner:
-            widget.adFreeController == null ||
-            !widget.adFreeController!.isAdFree,
-        canGenerateResume: _audio.resumeIndex != null,
-        onPreview: _isPreviewPlaying ? _stopPreview : _preview,
-        onGenerate: () => _generate(resume: _audio.resumeIndex != null),
-        onCancel: () {
-          if (!_audio.canCancel) return;
-          _audio.cancel();
-          setState(() => _status = s.get('generationCancelling'));
-        },
-      ),
+      bottomNavigationBar: !_canUse && widget.adFreeController != null
+          ? SafeArea(
+              child: AccessPurchaseSection(
+                purchase: widget.adFreeController!,
+                trial: widget.trialController,
+                strings: s,
+                compact: true,
+              ),
+            )
+          : GenerationActions(
+              strings: s,
+              busy: _busy,
+              generating: _isGenerating && _audio.canCancel,
+              previewPlaying: _isPreviewPlaying,
+              showProgress: _tts.ttsShowProgress,
+              status: _status,
+              canUse: _canUse,
+              canGenerateResume: _audio.resumeIndex != null,
+              onPreview: _isPreviewPlaying ? _stopPreview : _preview,
+              onGenerate: () => _generate(resume: _audio.resumeIndex != null),
+              onCancel: () {
+                if (!_audio.canCancel) return;
+                _audio.cancel();
+                setState(() => _status = s.get('generationCancelling'));
+              },
+            ),
     );
   }
 }

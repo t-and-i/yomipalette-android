@@ -34,3 +34,7 @@ The new unit tests verify document selection/splitting, TTS locale and preferenc
 
 ## Remaining design opportunities
 The `HomeScreen` still coordinates several asynchronous side effects (file/folder picker, permissions, voice list loading). Further splitting should be driven by testable use cases rather than splitting for line count alone. No server-side Billing integration is included in Phase 2; Phase 1's deployment blocker remains.
+
+## 2026-11-18 licensing migration
+
+The earlier AdMob architecture above is historical. Ads and UMP were removed; the app now has a device-local 30-day trial and one-time `full_access` license. `remove_ads` remains valid as a legacy entitlement. See `docs/google_play_billing.md` for Play Console setup. Production entitlement verification, signed offline grants and the public privacy policy require validation before release.

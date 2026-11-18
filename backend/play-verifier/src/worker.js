@@ -4,7 +4,7 @@ import { handleRtdn } from './rtdn.js';
 import { allowVerifyIp, allowVerifyToken } from './rate-limits.js';
 import {
   PACKAGE_NAME,
-  PRODUCT_ID,
+  SUPPORTED_PRODUCT_IDS,
   lookupGooglePurchase,
 } from './play-api.js';
 import {
@@ -67,7 +67,7 @@ async function readBoundedJson(request) {
 function validPayload(body) {
   return body &&
     body.packageName === PACKAGE_NAME &&
-    body.productId === PRODUCT_ID &&
+    SUPPORTED_PRODUCT_IDS.has(body.productId) &&
     typeof body.purchaseToken === 'string' &&
     body.purchaseToken.length >= 8 &&
     body.purchaseToken.length <= 4096 &&
@@ -124,7 +124,7 @@ export async function handleRequest(request, env, {
     const status = await lookupGooglePurchase(
       payload.purchaseToken,
       accessToken,
-      { fetchImpl },
+      { fetchImpl, productId: payload.productId },
     );
     return json(200, { status });
   } catch {

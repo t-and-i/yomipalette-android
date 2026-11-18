@@ -6,8 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'purchase_verifier.dart';
 
-/// Google Play Console: one non-consumable item, Japanese price JPY 500.
-const adFreeProductId = 'remove_ads';
+/// New permanent license; retain existing remove_ads purchases as grandfathered.
+const fullAccessProductId = 'full_access';
+const legacyAdFreeProductId = 'remove_ads';
+const adFreeProductId = fullAccessProductId;
 
 abstract class AdFreeBillingGateway {
   Stream<List<PurchaseDetails>> get purchases;
@@ -74,7 +76,9 @@ class AdFreePurchaseController extends ChangeNotifier {
   ProductDetails? _product;
   String? _message;
 
-  bool get isAdFree => _owned;
+  bool get isLicensed => _owned;
+  // Kept for existing integrations and tests during the migration.
+  bool get isAdFree => isLicensed;
   bool get storeAvailable => _available;
   bool get busy => _busy;
   ProductDetails? get product => _product;
@@ -105,7 +109,7 @@ class AdFreePurchaseController extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       // Offline entitlement caching requires a signed server-issued grant.
-      // Legacy QA flags must never unlock ads in ordinary Play releases.
+      // Legacy QA flags must never unlock the app in ordinary Play releases.
       _owned = billingQaMode
           ? (prefs.getBool(_qaEntitlementKey) ?? false)
           : false;
@@ -116,14 +120,17 @@ class AdFreePurchaseController extends ChangeNotifier {
         _notify();
         return;
       }
-      final result = await _gateway.queryProducts({adFreeProductId});
+      final result = await _gateway.queryProducts({
+        fullAccessProductId,
+        legacyAdFreeProductId,
+      });
       _product = result.productDetails
-          .where((item) => item.id == adFreeProductId)
+          .where((item) => item.id == fullAccessProductId)
           .firstOrNull;
       if (result.error != null) {
         _message = result.error!.message;
       } else if (_product == null) {
-        _message = 'The ad-free item is not available in Google Play yet.';
+        _message = 'The full access item is not available in Google Play yet.';
       }
       if (_verifier is UnconfiguredPurchaseVerifier) {
         _message = 'Secure purchase verification is not configured.';
@@ -182,12 +189,16 @@ class AdFreePurchaseController extends ChangeNotifier {
 
   Future<void> _applyUpdates(List<PurchaseDetails> purchases) async {
     for (final purchase in purchases) {
-      if (_disposed || purchase.productID != adFreeProductId) continue;
+      if (_disposed ||
+          (purchase.productID != fullAccessProductId &&
+              purchase.productID != legacyAdFreeProductId)) {
+        continue;
+      }
       switch (purchase.status) {
         case PurchaseStatus.pending:
           _busy = true;
           _message =
-              'Payment pending. Ads will remain until payment completes.';
+              'Payment pending. Full access begins after payment completes.';
           break;
         case PurchaseStatus.purchased:
         case PurchaseStatus.restored:

@@ -8,7 +8,7 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:tts_text_mp3_mobile/services/purchase_verifier.dart';
 
 PurchaseDetails purchase({String token = 'sample-token'}) => PurchaseDetails(
-  productID: 'remove_ads',
+  productID: 'full_access',
   purchaseID: 'order-test',
   verificationData: PurchaseVerificationData(
     localVerificationData: '{}',
@@ -29,7 +29,7 @@ void main() {
       expect(request.url, url);
       final body = jsonDecode(request.body) as Map<String, dynamic>;
       expect(body['purchaseToken'], 'sample-token');
-      expect(body['productId'], 'remove_ads');
+      expect(body['productId'], 'full_access');
       expect(body['packageName'], billingPackageName);
       expect(body['integrityToken'], 'mock-integrity-token');
       expect(body['requestId'], matches(r'^[a-f0-9]{32}$'));
@@ -38,7 +38,7 @@ void main() {
           jsonEncode([
             'yomipalette:/verify:v1',
             billingPackageName,
-            'remove_ads',
+            'full_access',
             sha256.convert(utf8.encode('sample-token')).toString(),
             body['requestId'],
           ]),

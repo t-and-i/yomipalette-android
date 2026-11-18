@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../l10n/strings.dart';
-import '../services/ad_banner.dart';
 
 class GenerationActions extends StatelessWidget {
   const GenerationActions({
@@ -11,7 +10,7 @@ class GenerationActions extends StatelessWidget {
     required this.previewPlaying,
     required this.showProgress,
     required this.status,
-    required this.showBanner,
+    this.canUse = true,
     required this.canGenerateResume,
     required this.onPreview,
     required this.onGenerate,
@@ -25,7 +24,7 @@ class GenerationActions extends StatelessWidget {
   final bool previewPlaying;
   final bool showProgress;
   final String status;
-  final bool showBanner;
+  final bool canUse;
   final bool canGenerateResume;
   final VoidCallback onPreview;
   final VoidCallback onGenerate;
@@ -51,14 +50,20 @@ class GenerationActions extends StatelessWidget {
             ],
           ),
         ),
-      if (showBanner) const YomiPaletteBanner(),
+      if (!canUse)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: Text(strings.get('trialExpired'), textAlign: TextAlign.center),
+        ),
       SafeArea(
         minimum: const EdgeInsets.fromLTRB(12, 8, 12, 8),
         child: Row(
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: previewPlaying || !busy ? onPreview : null,
+                onPressed: canUse && (previewPlaying || !busy)
+                    ? onPreview
+                    : null,
                 icon: Icon(previewPlaying ? Icons.stop : Icons.play_arrow),
                 label: Text(
                   strings.get(previewPlaying ? 'stopPreview' : 'preview'),
@@ -70,7 +75,7 @@ class GenerationActions extends StatelessWidget {
               child: FilledButton.icon(
                 onPressed: generating
                     ? onCancel
-                    : (busy || previewPlaying ? null : onGenerate),
+                    : (!canUse || busy || previewPlaying ? null : onGenerate),
                 icon: Icon(generating ? Icons.cancel_outlined : Icons.download),
                 label: Text(
                   strings.get(

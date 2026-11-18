@@ -31,7 +31,6 @@ dependencies:
   package_info_plus: ^9.0.1
   url_launcher: ^6.3.2
   pdfrx: 2.6.1
-  google_mobile_ads: ^9.2.0
   audio_decode: 1.3.3
   in_app_purchase: 3.3.1
 

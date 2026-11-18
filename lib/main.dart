@@ -10,6 +10,7 @@ import 'l10n/strings.dart';
 import 'models/chapter.dart';
 import 'screens/home_screen.dart';
 import 'services/ad_free_purchase.dart';
+import 'services/trial_access.dart';
 import 'services/preview_audio_player.dart';
 
 // Preserve the existing public HomeScreen symbol for consumers of main.dart.
@@ -33,19 +34,25 @@ class TtsMobileApp extends StatefulWidget {
   State<TtsMobileApp> createState() => _TtsMobileAppState();
 }
 
-class _TtsMobileAppState extends State<TtsMobileApp> {
+class _TtsMobileAppState extends State<TtsMobileApp>
+    with WidgetsBindingObserver {
   Locale? locale;
   bool _localeChangedDuringRestore = false;
   ThemeMode _themeMode = ThemeMode.system;
   bool _themeChangedDuringRestore = false;
   late final AdFreePurchaseController _adFreeController;
+  late final TrialAccessController _trialController;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _adFreeController = AdFreePurchaseController();
+    _trialController = TrialAccessController();
+    _trialController.addListener(_onPurchaseChanged);
     _adFreeController.addListener(_onPurchaseChanged);
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      unawaited(_trialController.initialize());
       unawaited(_adFreeController.initialize());
     }
     unawaited(_restoreThemeMode());
@@ -57,7 +64,17 @@ class _TtsMobileAppState extends State<TtsMobileApp> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_trialController.refresh());
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _trialController.removeListener(_onPurchaseChanged);
+    _trialController.dispose();
     _adFreeController.removeListener(_onPurchaseChanged);
     _adFreeController.dispose();
     super.dispose();
@@ -143,6 +160,10 @@ class _TtsMobileAppState extends State<TtsMobileApp> {
       themeMode: _themeMode,
       onThemeModeChanged: _changeThemeMode,
       adFreeController: _adFreeController,
+      trialController:
+          !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+          ? _trialController
+          : null,
       previewPlayer: widget.previewPlayer,
       externalLinkLauncher: widget.externalLinkLauncher,
       initialChapters: widget.initialChapters,
