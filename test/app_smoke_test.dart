@@ -73,7 +73,7 @@ void main() {
     expect(find.text('Edge TTS (Free)'), findsOneWidget);
   });
 
-  testWidgets('voice guidance is shown and limitations can be hidden',
+  testWidgets('voice guidance is shown and notice can be hidden',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
     FlutterSecureStorage.setMockInitialValues({});
@@ -95,11 +95,11 @@ void main() {
     );
 
     await tester.scrollUntilVisible(
-      find.text('Not supported on mobile'),
+      find.text('Important notes'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.text('Not supported on mobile'), findsOneWidget);
+    expect(find.text('Important notes'), findsOneWidget);
     await Scrollable.ensureVisible(
       tester.element(find.byIcon(Icons.close)),
       alignment: 0.5,
@@ -108,7 +108,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.close));
     await tester.pumpAndSettle();
 
-    expect(find.text('Not supported on mobile'), findsNothing);
+    expect(find.text('Important notes'), findsNothing);
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool('show_mobile_limitations'), isFalse);
   });
@@ -181,6 +181,29 @@ void main() {
         AppStrings(const Locale('en')).get('providerEdge'), 'Edge TTS (Free)');
     expect(AppStrings(const Locale('ja')).get('providerEdge'), 'Edge TTS (無料)');
     expect(AppStrings(const Locale('zh')).get('providerEdge'), 'Edge TTS（免费）');
+  });
+
+  test('important notice is localized in all supported languages', () {
+    const expected = <String, List<String>>{
+      'en': [
+        'Important notes',
+        'Edge TTS needs no API key but uses an unofficial service endpoint. See the mobile README.',
+      ],
+      'ja': [
+        '注意事項',
+        'Edge TTSはAPIキー不要ですが非公式エンドポイントを使用します。詳細はmobile READMEをご覧ください。',
+      ],
+      'zh': [
+        '注意事项',
+        'Edge TTS无需API密钥，但使用非官方服务端点。详情请参阅mobile README。',
+      ],
+    };
+
+    for (final locale in expected.keys) {
+      final strings = AppStrings(Locale(locale));
+      expect(strings.get('unsupported'), expected[locale]![0]);
+      expect(strings.get('limitations'), expected[locale]![1]);
+    }
   });
 
   testWidgets('Android shows installed device TTS engines and voices',
