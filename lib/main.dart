@@ -67,6 +67,7 @@ class _TtsMobileAppState extends State<TtsMobileApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_trialController.refresh());
+      unawaited(_adFreeController.refreshEntitlement());
     }
   }
 

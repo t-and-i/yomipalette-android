@@ -2,6 +2,7 @@ import { getPlayAccessToken } from './oauth.js';
 import { verifyPlayIntegrity, INTEGRITY_SCOPE } from './play-integrity.js';
 import { handleRtdn } from './rtdn.js';
 import { allowVerifyIp, allowVerifyToken } from './rate-limits.js';
+import { issueOfflineGrant, validDeviceId } from './offline-grants.js';
 import {
   PACKAGE_NAME,
   SUPPORTED_PRODUCT_IDS,
@@ -75,7 +76,8 @@ function validPayload(body) {
     /^[a-f0-9]{32}$/.test(body.requestId) &&
     typeof body.integrityToken === 'string' &&
     body.integrityToken.length > 0 &&
-    body.integrityToken.length <= 16384;
+    body.integrityToken.length <= 16384 &&
+    (body.deviceId === undefined || validDeviceId(body.deviceId));
 }
 
 /**
@@ -126,7 +128,16 @@ export async function handleRequest(request, env, {
       accessToken,
       { fetchImpl, productId: payload.productId },
     );
-    return json(200, { status });
+    if (status !== 'verified' || payload.deviceId === undefined) {
+      return json(200, { status });
+    }
+    // Issue only after fresh Google Play, Play Integrity and D1 checks.
+    const offlineGrant = await issueOfflineGrant(env, {
+      productId: payload.productId,
+      deviceId: payload.deviceId,
+      purchaseTokenHash: hash,
+    }, now());
+    return json(200, { status, offlineGrant });
   } catch {
     // No token, credential, raw Google error or request body in responses/logs.
     return json(503, { status: 'unavailable' });

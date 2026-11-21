@@ -10,13 +10,15 @@ export async function verifyPlayIntegrity(payload, purchaseTokenHash, accessToke
   now,
 }) {
   // Keep this ordered, versioned array in sync with the Flutter verifier.
-  const expectedHash = await tokenHash(JSON.stringify([
-    'yomipalette:/verify:v1',
-    payload.packageName,
-    payload.productId,
-    purchaseTokenHash,
-    payload.requestId,
-  ]));
+  const expectedHash = await tokenHash(JSON.stringify(payload.deviceId === undefined
+    ? [
+        'yomipalette:/verify:v1', payload.packageName,
+        payload.productId, purchaseTokenHash, payload.requestId,
+      ]
+    : [
+        'yomipalette:/verify:v2', payload.packageName,
+        payload.productId, purchaseTokenHash, payload.requestId, payload.deviceId,
+      ]));
   const response = await fetchImpl(
     'https://playintegrity.googleapis.com/v1/' + PACKAGE_NAME + ':decodeIntegrityToken',
     {

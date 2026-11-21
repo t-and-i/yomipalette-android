@@ -2,11 +2,12 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:in_app_purchase/in_app_purchase.dart';
+
+import 'offline_entitlement_cache.dart';
 
 /// A QA-only escape hatch. Never enable it in a production Play release.
 const bool billingQaMode = bool.fromEnvironment(
@@ -34,13 +35,28 @@ const String billingPackageName = 'com.tjsongwei.tts_text_mp3_mobile';
 
 enum PurchaseVerificationResult { verified, rejected, unavailable }
 
+class PurchaseVerificationOutcome {
+  const PurchaseVerificationOutcome(this.result, {this.offlineGrant});
+
+  final PurchaseVerificationResult result;
+  final String? offlineGrant;
+}
+
 abstract interface class PurchaseVerifier {
   Future<PurchaseVerificationResult> verify(PurchaseDetails purchase);
   void dispose();
 }
 
+/// Only a backend that binds the integrity verdict to a device ID may
+/// provide a signed offline entitlement. Legacy QA verifiers do not.
+abstract interface class OfflineGrantPurchaseVerifier {
+  Future<PurchaseVerificationOutcome> verifyForDevice(
+    PurchaseDetails purchase,
+    String deviceId,
+  );
+}
+
 /// The test verifier intentionally does NOT prove that payment was made.
-/// It must only be used in debug / explicitly tagged internal-QA builds.
 class QaPurchaseVerifier implements PurchaseVerifier {
   const QaPurchaseVerifier();
 
@@ -65,13 +81,10 @@ class UnconfiguredPurchaseVerifier implements PurchaseVerifier {
   void dispose() {}
 }
 
-/// Calls a trusted backend which independently checks the purchase token
-/// against the Google Play Developer API. The server MUST verify package ID,
-/// product ID, PURCHASED state, cancellation/refunds and request integrity.
-///
-/// Do not embed a Google Play service account or other API secrets in the app.
-/// HTTP and invalid/unexpected responses fail closed.
-class BackendPurchaseVerifier implements PurchaseVerifier {
+/// Validates with a Worker, which checks Play Developer API, Play Integrity
+/// and revoked purchases before signing an installation-scoped grant.
+class BackendPurchaseVerifier
+    implements PurchaseVerifier, OfflineGrantPurchaseVerifier {
   BackendPurchaseVerifier({
     required Uri endpoint,
     http.Client? client,
@@ -91,33 +104,71 @@ class BackendPurchaseVerifier implements PurchaseVerifier {
   final bool _ownsClient;
 
   @override
-  Future<PurchaseVerificationResult> verify(PurchaseDetails purchase) async {
+  Future<PurchaseVerificationResult> verify(PurchaseDetails purchase) async =>
+      (await _verify(purchase)).result;
+
+  @override
+  Future<PurchaseVerificationOutcome> verifyForDevice(
+    PurchaseDetails purchase,
+    String deviceId,
+  ) async {
+    if (!RegExp(r'^[A-Za-z0-9_-]{43}$').hasMatch(deviceId)) {
+      return const PurchaseVerificationOutcome(
+        PurchaseVerificationResult.unavailable,
+      );
+    }
+    return _verify(purchase, deviceId: deviceId);
+  }
+
+  Future<PurchaseVerificationOutcome> _verify(
+    PurchaseDetails purchase, {
+    String? deviceId,
+  }) async {
+    const unavailable = PurchaseVerificationOutcome(
+      PurchaseVerificationResult.unavailable,
+    );
     final token = purchase.verificationData.serverVerificationData;
-    if (token.isEmpty) return PurchaseVerificationResult.rejected;
+    if (token.isEmpty) {
+      return const PurchaseVerificationOutcome(
+        PurchaseVerificationResult.rejected,
+      );
+    }
     try {
       final random = Random.secure();
       final requestId = List.generate(
         16,
         (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
       ).join();
-      // The Worker computes this same versioned digest from the received fields.
+      // v2 binds the new device ID to the Play Integrity request hash.
+      // v1 remains supported for installed legacy app versions.
       final requestHash = sha256
           .convert(
             utf8.encode(
-              jsonEncode([
-                'yomipalette:/verify:v1',
-                billingPackageName,
-                purchase.productID,
-                sha256.convert(utf8.encode(token)).toString(),
-                requestId,
-              ]),
+              jsonEncode(
+                deviceId == null
+                    ? [
+                        'yomipalette:/verify:v1',
+                        billingPackageName,
+                        purchase.productID,
+                        sha256.convert(utf8.encode(token)).toString(),
+                        requestId,
+                      ]
+                    : [
+                        'yomipalette:/verify:v2',
+                        billingPackageName,
+                        purchase.productID,
+                        sha256.convert(utf8.encode(token)).toString(),
+                        requestId,
+                        deviceId,
+                      ],
+              ),
             ),
           )
           .toString();
       final integrityToken = await _integrityToken(requestHash)
           .timeout(const Duration(seconds: 60));
       if (integrityToken == null || integrityToken.isEmpty) {
-        return PurchaseVerificationResult.unavailable;
+        return unavailable;
       }
 
       final response = await _client
@@ -130,23 +181,27 @@ class BackendPurchaseVerifier implements PurchaseVerifier {
               'purchaseToken': token,
               'requestId': requestId,
               'integrityToken': integrityToken,
+              if (deviceId != null) 'deviceId': deviceId,
             }),
           )
           .timeout(const Duration(seconds: 40));
-      if (response.statusCode != 200) {
-        return PurchaseVerificationResult.unavailable;
-      }
+      if (response.statusCode != 200) return unavailable;
       final body = jsonDecode(response.body);
-      if (body is! Map<String, dynamic>) {
-        return PurchaseVerificationResult.unavailable;
-      }
+      if (body is! Map<String, dynamic>) return unavailable;
       return switch (body['status']) {
-        'verified' => PurchaseVerificationResult.verified,
-        'rejected' => PurchaseVerificationResult.rejected,
-        _ => PurchaseVerificationResult.unavailable,
+        'verified' => PurchaseVerificationOutcome(
+          PurchaseVerificationResult.verified,
+          offlineGrant: body['offlineGrant'] is String
+              ? body['offlineGrant'] as String
+              : null,
+        ),
+        'rejected' => const PurchaseVerificationOutcome(
+          PurchaseVerificationResult.rejected,
+        ),
+        _ => unavailable,
       };
     } catch (_) {
-      return PurchaseVerificationResult.unavailable;
+      return unavailable;
     }
   }
 
@@ -158,6 +213,12 @@ class BackendPurchaseVerifier implements PurchaseVerifier {
 
 PurchaseVerifier createPurchaseVerifier() {
   if (billingQaMode) return const QaPurchaseVerifier();
+  // Refuse to sell a permanent license if this build cannot validate a
+  // backend-issued offline grant. The release build scripts enforce this too.
+  if (!RegExp(r'^[A-Za-z0-9_-]{43}$').hasMatch(offlineGrantPublicKey) ||
+      !RegExp(r'^[A-Za-z0-9_-]{1,32}$').hasMatch(offlineGrantKeyId)) {
+    return const UnconfiguredPurchaseVerifier();
+  }
   if (billingVerificationUrl.isEmpty ||
       (int.tryParse(playIntegrityProjectNumber) ?? 0) <= 0) {
     return const UnconfiguredPurchaseVerifier();

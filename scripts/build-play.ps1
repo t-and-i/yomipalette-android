@@ -4,7 +4,9 @@ param(
     [string]$JavaBin = 'C:\Program Files\Android\Android Studio\jbr\bin',
     [switch]$InternalTestBilling,
     [string]$PurchaseVerifierUrl = $env:YOMIPALETTE_BILLING_VERIFY_URL,
-    [string]$IntegrityProjectNumber = $env:YOMIPALETTE_PLAY_INTEGRITY_PROJECT_NUMBER
+    [string]$IntegrityProjectNumber = $env:YOMIPALETTE_PLAY_INTEGRITY_PROJECT_NUMBER,
+    [string]$OfflineGrantPublicKey = $env:YOMIPALETTE_OFFLINE_GRANT_PUBLIC_KEY,
+    [string]$OfflineGrantKeyId = $env:YOMIPALETTE_OFFLINE_GRANT_KEY_ID
 )
 $ErrorActionPreference = 'Stop'
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -42,6 +44,12 @@ try {
         }
         $flutterArgs += "--dart-define=YOMIPALETTE_PLAY_INTEGRITY_PROJECT_NUMBER=$projectNumber"
         $flutterArgs += "--dart-define=YOMIPALETTE_BILLING_VERIFY_URL=$PurchaseVerifierUrl"
+        if ($OfflineGrantPublicKey -cnotmatch '^[A-Za-z0-9_-]{43}$' -or
+            $OfflineGrantKeyId -cnotmatch '^[A-Za-z0-9_-]{1,32}$') {
+            throw 'Production AAB blocked: configure the Ed25519 offline grant public key and key ID.'
+        }
+        $flutterArgs += "--dart-define=YOMIPALETTE_OFFLINE_GRANT_PUBLIC_KEY=$OfflineGrantPublicKey"
+        $flutterArgs += "--dart-define=YOMIPALETTE_OFFLINE_GRANT_KEY_ID=$OfflineGrantKeyId"
     }
     & flutter @flutterArgs
     if ($LASTEXITCODE -ne 0) { throw 'Play AAB build failed; do not use a previous output.' }
