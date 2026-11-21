@@ -43,8 +43,9 @@ class TrialAccessController extends ChangeNotifier {
     final start = storedStart == null
         ? now
         : DateTime.fromMillisecondsSinceEpoch(storedStart, isUtc: true);
-    if (storedStart == null)
+    if (storedStart == null) {
       await prefs.setInt(startedKey, start.millisecondsSinceEpoch);
+    }
     _started = start;
     _initialized = true;
     await refresh();
