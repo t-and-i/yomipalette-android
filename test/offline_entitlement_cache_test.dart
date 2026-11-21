@@ -302,7 +302,9 @@ void main() {
       expect(cache.hasValidGrant, false);
       expect(await cache.getCachedPurchase(), null);
       now = now.add(const Duration(minutes: 6));
-      expect(controller.isLicensed, false);
+      // Debug QA deliberately trusts fake Play purchases; production does not.
+      // CI runs this suite again with BILLING_QA=false to enforce the limit.
+      expect(controller.isLicensed, billingQaMode);
       controller.dispose();
       await billing.events.close();
     },
