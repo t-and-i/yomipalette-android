@@ -5,9 +5,12 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'purchase_verifier.dart';
+import 'offline_entitlement_cache.dart';
 
-/// Google Play Console: one non-consumable item, Japanese price JPY 500.
-const adFreeProductId = 'remove_ads';
+/// New permanent license; retain existing remove_ads purchases as grandfathered.
+const fullAccessProductId = 'full_access';
+const legacyAdFreeProductId = 'remove_ads';
+const adFreeProductId = fullAccessProductId;
 
 abstract class AdFreeBillingGateway {
   Stream<List<PurchaseDetails>> get purchases;
@@ -53,9 +56,14 @@ class AdFreePurchaseController extends ChangeNotifier {
   AdFreePurchaseController({
     AdFreeBillingGateway? gateway,
     PurchaseVerifier? verifier,
+    OfflineEntitlementStore? offlineStore,
+    DateTime Function()? clock,
   }) : _gateway = gateway ?? const GooglePlayBillingGateway(),
        _verifier = verifier ?? createPurchaseVerifier(),
-       _ownsVerifier = verifier == null;
+       _ownsVerifier = verifier == null,
+       _offline = offlineStore ?? SignedOfflineEntitlementStore(),
+       _offlineEnabled = offlineStore != null || !billingQaMode,
+       _clock = clock ?? DateTime.now;
 
   // Historical QA entitlement: never trust this stored flag in production.
   static const _qaEntitlementKey = 'ad_free_owned_v1';
@@ -63,6 +71,13 @@ class AdFreePurchaseController extends ChangeNotifier {
   final AdFreeBillingGateway _gateway;
   final PurchaseVerifier _verifier;
   final bool _ownsVerifier;
+  final OfflineEntitlementStore _offline;
+  final bool _offlineEnabled;
+  final DateTime Function() _clock;
+  bool _offlineReady = false;
+  DateTime? _onlineVerifiedAt;
+  DateTime? _lastCachedRecheck;
+  bool _checkingCachedPurchase = false;
   StreamSubscription<List<PurchaseDetails>>? _updates;
   Future<void> _updateTail = Future<void>.value();
   final Set<String> _acknowledgedTokens = {};
@@ -74,16 +89,36 @@ class AdFreePurchaseController extends ChangeNotifier {
   ProductDetails? _product;
   String? _message;
 
-  bool get isAdFree => _owned;
+  bool get isLicensed {
+    final now = _clock().toUtc();
+    final online =
+        _owned &&
+        (billingQaMode ||
+            (_onlineVerifiedAt != null &&
+                !now.isBefore(
+                  _onlineVerifiedAt!.subtract(const Duration(minutes: 1)),
+                ) &&
+                // If secure storage is unavailable, allow only a brief
+                // freshly verified in-memory online session. Never use this
+                // as a substitute for the signed 72-hour offline grant.
+                now.isBefore(
+                  _onlineVerifiedAt!.add(const Duration(minutes: 5)),
+                )));
+    return online || (_offlineReady && _offline.hasValidGrant);
+  }
+
+  // Kept for existing integrations and tests during the migration.
+  bool get isAdFree => isLicensed;
   bool get storeAvailable => _available;
   bool get busy => _busy;
   ProductDetails? get product => _product;
   String? get message => _message;
   bool get canBuy =>
-      !_owned &&
+      !isLicensed &&
       _available &&
       !_busy &&
       _product != null &&
+      (billingQaMode || _offlineReady) &&
       _verifier is! UnconfiguredPurchaseVerifier;
 
   void _notify() {
@@ -103,9 +138,18 @@ class AdFreePurchaseController extends ChangeNotifier {
       },
     );
     try {
+      if (_offlineEnabled) {
+        try {
+          await _offline.initialize();
+          _offlineReady = true;
+        } catch (_) {
+          // Online billing is still available if encrypted storage fails.
+          _offlineReady = false;
+        }
+      }
       final prefs = await SharedPreferences.getInstance();
       // Offline entitlement caching requires a signed server-issued grant.
-      // Legacy QA flags must never unlock ads in ordinary Play releases.
+      // Legacy QA flags must never unlock the app in ordinary Play releases.
       _owned = billingQaMode
           ? (prefs.getBool(_qaEntitlementKey) ?? false)
           : false;
@@ -116,20 +160,24 @@ class AdFreePurchaseController extends ChangeNotifier {
         _notify();
         return;
       }
-      final result = await _gateway.queryProducts({adFreeProductId});
+      final result = await _gateway.queryProducts({
+        fullAccessProductId,
+        legacyAdFreeProductId,
+      });
       _product = result.productDetails
-          .where((item) => item.id == adFreeProductId)
+          .where((item) => item.id == fullAccessProductId)
           .firstOrNull;
       if (result.error != null) {
         _message = result.error!.message;
       } else if (_product == null) {
-        _message = 'The ad-free item is not available in Google Play yet.';
+        _message = 'The full access item is not available in Google Play yet.';
       }
       if (_verifier is UnconfiguredPurchaseVerifier) {
         _message = 'Secure purchase verification is not configured.';
       }
       _notify();
       await _gateway.restore();
+      await _revalidateCachedPurchase();
     } catch (_) {
       _message = 'Google Play could not be contacted. Try again later.';
       _notify();
@@ -161,10 +209,128 @@ class AdFreePurchaseController extends ChangeNotifier {
     _message = null;
     _notify();
     try {
+      await _revalidateCachedPurchase(force: true);
       await _gateway.restore();
     } catch (_) {
       _message = 'Could not restore purchases.';
       _notify();
+    }
+  }
+
+  /// Re-evaluate a signed grant on foreground, then check purchase revocation
+  /// online using the receipt kept in Android Keystore-backed storage.
+  Future<void> refreshEntitlement() async {
+    if (_offlineReady) {
+      try {
+        await _offline.refresh();
+      } catch (_) {
+        // A storage outage must never create an offline entitlement.
+      }
+    }
+    _notify();
+    try {
+      _available = await _gateway.isAvailable();
+      if (_available) {
+        await _revalidateCachedPurchase();
+        await _gateway.restore();
+      }
+    } catch (_) {
+      // Preserve only the remaining signed offline window.
+    }
+    _notify();
+  }
+
+  Future<PurchaseVerificationOutcome> _verifyPurchase(
+    PurchaseDetails purchase,
+  ) async {
+    if (_offlineReady && _verifier is OfflineGrantPurchaseVerifier) {
+      try {
+        final deviceId = await _offline.getDeviceId();
+        return await (_verifier as OfflineGrantPurchaseVerifier)
+            .verifyForDevice(purchase, deviceId);
+      } catch (_) {
+        // Fallback to the existing online-only verification protocol.
+      }
+    }
+    return PurchaseVerificationOutcome(await _verifier.verify(purchase));
+  }
+
+  Future<void> _saveVerifiedGrant(
+    String? grant,
+    String productId,
+    String receipt,
+  ) async {
+    if (_offlineReady && grant != null && grant.isNotEmpty) {
+      try {
+        if (await _offline.accept(grant)) {
+          await _offline.rememberPurchase(productId, receipt);
+        }
+      } catch (_) {
+        // Failed storage/signature verification never grants offline access.
+      }
+    }
+  }
+
+  Future<void> _revalidateCachedPurchase({bool force = false}) async {
+    if (!_offlineReady ||
+        _verifier is! OfflineGrantPurchaseVerifier ||
+        _checkingCachedPurchase) {
+      return;
+    }
+    final now = _clock().toUtc();
+    if (!force &&
+        _lastCachedRecheck != null &&
+        now.difference(_lastCachedRecheck!) < const Duration(minutes: 3)) {
+      return;
+    }
+    final cached = await _offline.getCachedPurchase();
+    if (cached == null) return;
+    _checkingCachedPurchase = true;
+    _lastCachedRecheck = now;
+    try {
+      final receipt = PurchaseDetails(
+        productID: cached.productId,
+        purchaseID: null,
+        verificationData: PurchaseVerificationData(
+          localVerificationData: '',
+          serverVerificationData: cached.token,
+          source: 'google_play',
+        ),
+        transactionDate: null,
+        status: PurchaseStatus.restored,
+      );
+      final outcome = await _verifyPurchase(receipt);
+      if (_disposed) return;
+      switch (outcome.result) {
+        case PurchaseVerificationResult.verified:
+          await _saveVerifiedGrant(
+            outcome.offlineGrant,
+            cached.productId,
+            cached.token,
+          );
+          _owned = true;
+          _onlineVerifiedAt = _clock().toUtc();
+          _message = null;
+          break;
+        case PurchaseVerificationResult.rejected:
+          _owned = false;
+          _onlineVerifiedAt = null;
+          await _offline.clear();
+          if (billingQaMode) {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setBool(_qaEntitlementKey, false);
+          }
+          _message = 'Google Play purchase verification was rejected.';
+          break;
+        case PurchaseVerificationResult.unavailable:
+          // Keep only the unexpired signed grant; do not extend its TTL.
+          break;
+      }
+      _notify();
+    } catch (_) {
+      // Temporary backend/storage failure does not reset the signed expiry.
+    } finally {
+      _checkingCachedPurchase = false;
     }
   }
 
@@ -182,24 +348,34 @@ class AdFreePurchaseController extends ChangeNotifier {
 
   Future<void> _applyUpdates(List<PurchaseDetails> purchases) async {
     for (final purchase in purchases) {
-      if (_disposed || purchase.productID != adFreeProductId) continue;
+      if (_disposed ||
+          (purchase.productID != fullAccessProductId &&
+              purchase.productID != legacyAdFreeProductId)) {
+        continue;
+      }
       switch (purchase.status) {
         case PurchaseStatus.pending:
           _busy = true;
           _message =
-              'Payment pending. Ads will remain until payment completes.';
+              'Payment pending. Full access begins after payment completes.';
           break;
         case PurchaseStatus.purchased:
         case PurchaseStatus.restored:
-          final verification = await _verifier.verify(purchase);
+          final verification = await _verifyPurchase(purchase);
           if (_disposed) return;
           final prefs = await SharedPreferences.getInstance();
-          switch (verification) {
+          switch (verification.result) {
             case PurchaseVerificationResult.verified:
               if (billingQaMode) {
                 await prefs.setBool(_qaEntitlementKey, true);
               }
+              await _saveVerifiedGrant(
+                verification.offlineGrant,
+                purchase.productID,
+                purchase.verificationData.serverVerificationData,
+              );
               _owned = true;
+              _onlineVerifiedAt = _clock().toUtc();
               _busy = false;
               _message = null;
               if (purchase.pendingCompletePurchase) {
@@ -216,6 +392,14 @@ class AdFreePurchaseController extends ChangeNotifier {
               break;
             case PurchaseVerificationResult.rejected:
               _owned = false;
+              _onlineVerifiedAt = null;
+              if (_offlineReady) {
+                try {
+                  await _offline.clear();
+                } catch (_) {
+                  // In-memory entitlement is dropped even on storage failure.
+                }
+              }
               _busy = false;
               if (billingQaMode) {
                 await prefs.setBool(_qaEntitlementKey, false);

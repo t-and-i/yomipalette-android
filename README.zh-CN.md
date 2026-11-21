@@ -70,3 +70,7 @@ GitHub Actions执行分析、测试和Android调试APK构建。推送新的 `v*`
 密钥、含随机生成明文密码的 `key.properties` 和公开证书位于Git之外的 `%USERPROFILE%/.android/yomipalette-signing/`，仅当前Windows用户有访问权限。请将整个目录备份到加密存储，切勿提交或分享密钥和密码文件。只有 `upload-certificate.pem` 是公开证书。脚本不会覆盖已有目录。可用 `-JavaBin` 指定其他JBR路径，构建时可用 `-SigningProperties` 指定其他UTF-8配置文件（storeFile、storePassword、keyAlias、keyPassword；storeFile使用绝对路径和正斜杠），公开证书须放在同一目录。
 
 普通调试运行及release APK仍使用测试用调试签名。release AAB必须通过专用脚本显式启用Play签名，缺少密钥时不会回退。尚未配置CI密钥或上传发布。Play App Signing需另行设置；Google管理的分发密钥与上传密钥、调试签名不同，因此测试APK不能直接覆盖更新为该Play版本。保持应用ID不变，后续提交时递增versionCode。AAB不能像APK一样直接安装。隐私政策网址、Play申报、测试及发布仍需另行完成。
+
+## Android试用与购买（2026年11月）
+
+首次启动后30天可免费使用。到期后可通过Google Play一次性购买 `full_access`（日本计划售价500日元），永久解锁试听和音频生成。本应用不包含广告SDK。以前购买 `remove_ads` 的用户可恢复权益。试用起始时间仅保存在设备本地，清除应用数据可能重置试用。发布前需在Play Console创建商品，更新公开隐私政策，并验证正式支付流程。

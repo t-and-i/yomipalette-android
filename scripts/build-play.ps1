@@ -2,9 +2,11 @@
 param(
     [string]$SigningProperties = (Join-Path $env:USERPROFILE '.android\yomipalette-signing\key.properties'),
     [string]$JavaBin = 'C:\Program Files\Android\Android Studio\jbr\bin',
-    [switch]$InternalTestAds,
+    [switch]$InternalTestBilling,
     [string]$PurchaseVerifierUrl = $env:YOMIPALETTE_BILLING_VERIFY_URL,
-    [string]$IntegrityProjectNumber = $env:YOMIPALETTE_PLAY_INTEGRITY_PROJECT_NUMBER
+    [string]$IntegrityProjectNumber = $env:YOMIPALETTE_PLAY_INTEGRITY_PROJECT_NUMBER,
+    [string]$OfflineGrantPublicKey = $env:YOMIPALETTE_OFFLINE_GRANT_PUBLIC_KEY,
+    [string]$OfflineGrantKeyId = $env:YOMIPALETTE_OFFLINE_GRANT_KEY_ID
 )
 $ErrorActionPreference = 'Stop'
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -24,18 +26,16 @@ try {
     $env:ORG_GRADLE_PROJECT_PLAY_RELEASE = 'true'
     $env:ORG_GRADLE_PROJECT_PLAY_SIGNING_PROPERTIES = [IO.Path]::GetFullPath($SigningProperties)
     $flutterArgs = @('build', 'appbundle', '--release')
-    if ($InternalTestAds) {
-        # A QA-only AAB: use sample ads AND the explicitly unverified Billing flow.
+    if ($InternalTestBilling) {
+        # A QA-only AAB: explicitly unverified Billing flow.
         # Never promote it to the production track.
-        $flutterArgs += '--dart-define=YOMIPALETTE_TEST_ADS=true'
-        $flutterArgs += '--dart-define=YOMIPALETTE_AD_DIAGNOSTICS=true'
         $flutterArgs += '--dart-define=YOMIPALETTE_BILLING_QA=true'
-        Write-Host 'Building INTERNAL TEST ONLY AAB (sample ads + QA Billing).'
+        Write-Host 'Building INTERNAL TEST ONLY AAB (QA Billing).'
     } else {
         # An ordinary Play release must not grant entitlements without a backend.
         if ([string]::IsNullOrWhiteSpace($PurchaseVerifierUrl) -or
             $PurchaseVerifierUrl -notmatch '^https://[^/]+') {
-            throw 'Production AAB blocked: configure an HTTPS purchase verification backend via -PurchaseVerifierUrl. Use -InternalTestAds only for internal QA.'
+            throw 'Production AAB blocked: configure an HTTPS purchase verification backend via -PurchaseVerifierUrl. Use -InternalTestBilling only for internal QA.'
         }
         $projectNumber = 0L
         if ($IntegrityProjectNumber -notmatch '^[0-9]+$' -or
@@ -44,6 +44,12 @@ try {
         }
         $flutterArgs += "--dart-define=YOMIPALETTE_PLAY_INTEGRITY_PROJECT_NUMBER=$projectNumber"
         $flutterArgs += "--dart-define=YOMIPALETTE_BILLING_VERIFY_URL=$PurchaseVerifierUrl"
+        if ($OfflineGrantPublicKey -cnotmatch '^[A-Za-z0-9_-]{43}$' -or
+            $OfflineGrantKeyId -cnotmatch '^[A-Za-z0-9_-]{1,32}$') {
+            throw 'Production AAB blocked: configure the Ed25519 offline grant public key and key ID.'
+        }
+        $flutterArgs += "--dart-define=YOMIPALETTE_OFFLINE_GRANT_PUBLIC_KEY=$OfflineGrantPublicKey"
+        $flutterArgs += "--dart-define=YOMIPALETTE_OFFLINE_GRANT_KEY_ID=$OfflineGrantKeyId"
     }
     & flutter @flutterArgs
     if ($LASTEXITCODE -ne 0) { throw 'Play AAB build failed; do not use a previous output.' }
@@ -63,7 +69,7 @@ try {
     }
     Write-Host "Signed Play upload bundle: $bundle"
     Get-FileHash -Algorithm SHA256 -LiteralPath $bundle
-    if ($InternalTestAds) {
+    if ($InternalTestBilling) {
         $versionLine = Get-Content (Join-Path $repository 'pubspec.yaml') | Where-Object { $_ -match '^version:\s*\S+' } | Select-Object -First 1
         if ($versionLine -notmatch '^version:\s*(\d+\.\d+\.\d+)\+(\d+)\s*$') {
             throw 'Cannot determine the version from pubspec.yaml.'

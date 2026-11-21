@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { handleRequest, runScheduledSync } from '../src/worker.js';
-import { PACKAGE_NAME, PRODUCT_ID } from '../src/play-api.js';
+import { PACKAGE_NAME, PRODUCT_ID, LEGACY_PRODUCT_ID, classifyPurchase } from '../src/play-api.js';
 import { tokenHash } from '../src/revocations.js';
 
 const NOW = Date.parse('2026-11-04T00:00:00.000Z');
@@ -77,7 +77,7 @@ function request(data = {}) {
   });
 }
 
-function setup({ db = new FakeD1(), googleBody = purchase(), googleStatus = 200, changeVerdict = (value) => value, decodeStatus = 200 } = {}) {
+function setup({ db = new FakeD1(), googleBody = purchase(), googleStatus = 200, productId = PRODUCT_ID, changeVerdict = (value) => value, decodeStatus = 200 } = {}) {
   let calls = 0;
   const dependencies = {
     now: () => NOW,
@@ -93,7 +93,7 @@ function setup({ db = new FakeD1(), googleBody = purchase(), googleStatus = 200,
         assert.equal(options.headers.Authorization, 'Bearer test-integrity-access-token');
         assert.deepEqual(JSON.parse(options.body), { integrity_token: 'mock-integrity-token' });
         const requestHash = await tokenHash(JSON.stringify([
-          'yomipalette:/verify:v1', PACKAGE_NAME, PRODUCT_ID, await tokenHash(TOKEN), REQUEST_ID,
+          'yomipalette:/verify:v1', PACKAGE_NAME, productId, await tokenHash(TOKEN), REQUEST_ID,
         ]));
         return Response.json({ tokenPayloadExternal: changeVerdict({
           requestDetails: { requestPackageName: PACKAGE_NAME, requestHash, timestampMillis: String(NOW) },
@@ -337,4 +337,27 @@ test('partial cron failure leaves sync timestamp unchanged', async () => {
   assert.equal(db.completedAt, null);
   // The partial revocation write is safe; the next successful scan is idempotent.
   assert.equal(db.revoked.size, 1);
+});
+
+test('legacy purchases remain valid only for the matching product ID', () => {
+  assert.equal(classifyPurchase(purchase({ id: LEGACY_PRODUCT_ID }), LEGACY_PRODUCT_ID), 'verified');
+  assert.equal(classifyPurchase(purchase({ id: LEGACY_PRODUCT_ID }), PRODUCT_ID), 'rejected');
+  assert.equal(classifyPurchase(purchase({ id: PRODUCT_ID }), LEGACY_PRODUCT_ID), 'rejected');
+});
+
+test('legacy purchase is restored and cannot impersonate the new product', async () => {
+  const ctx = setup({
+    productId: LEGACY_PRODUCT_ID,
+    googleBody: purchase({ id: LEGACY_PRODUCT_ID }),
+  });
+  const restored = await handleRequest(request({ productId: LEGACY_PRODUCT_ID }), ctx.env, ctx.dependencies);
+  assert.equal(restored.status, 200);
+  assert.deepEqual(await restored.json(), { status: 'verified' });
+
+  const mismatched = setup({
+    productId: LEGACY_PRODUCT_ID,
+    googleBody: purchase({ id: PRODUCT_ID }),
+  });
+  const rejected = await handleRequest(request({ productId: LEGACY_PRODUCT_ID }), mismatched.env, mismatched.dependencies);
+  assert.deepEqual(await rejected.json(), { status: 'rejected' });
 });

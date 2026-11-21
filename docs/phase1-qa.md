@@ -35,7 +35,7 @@ QAアプリの設定・ファイル・購入状態はPlay版とは別です。�
 ## Billing実機確認
 
 - QA APK（末尾 .qa）のGoogle Play購入テストはできません。
-- Play内部テスト用には `.\scripts\build-play.ps1 -InternalTestAds` で別のアップロード署名済みAABを作成できます。Googleサンプル広告と未検証の購入通知を使用するため、**製品版に転用しない**こと。
+- Play内部テスト用には `.\scripts\build-play.ps1 -InternalTestBilling` で別のアップロード署名済みAABを作成できます。未検証の購入通知を使用するため、**製品版に転用しない**こと。
 - バックエンド検証が未稼働の場合、通常のPlay公開用ビルドは購入検証URLを要求して停止します。
 - リアル決済禁止：ライセンステスターのみ、Google Playのテスト購入表示を確認する。
 

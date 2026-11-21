@@ -2,9 +2,10 @@ import { getPlayAccessToken } from './oauth.js';
 import { verifyPlayIntegrity, INTEGRITY_SCOPE } from './play-integrity.js';
 import { handleRtdn } from './rtdn.js';
 import { allowVerifyIp, allowVerifyToken } from './rate-limits.js';
+import { issueOfflineGrant, validDeviceId } from './offline-grants.js';
 import {
   PACKAGE_NAME,
-  PRODUCT_ID,
+  SUPPORTED_PRODUCT_IDS,
   lookupGooglePurchase,
 } from './play-api.js';
 import {
@@ -67,7 +68,7 @@ async function readBoundedJson(request) {
 function validPayload(body) {
   return body &&
     body.packageName === PACKAGE_NAME &&
-    body.productId === PRODUCT_ID &&
+    SUPPORTED_PRODUCT_IDS.has(body.productId) &&
     typeof body.purchaseToken === 'string' &&
     body.purchaseToken.length >= 8 &&
     body.purchaseToken.length <= 4096 &&
@@ -75,7 +76,8 @@ function validPayload(body) {
     /^[a-f0-9]{32}$/.test(body.requestId) &&
     typeof body.integrityToken === 'string' &&
     body.integrityToken.length > 0 &&
-    body.integrityToken.length <= 16384;
+    body.integrityToken.length <= 16384 &&
+    (body.deviceId === undefined || validDeviceId(body.deviceId));
 }
 
 /**
@@ -124,9 +126,18 @@ export async function handleRequest(request, env, {
     const status = await lookupGooglePurchase(
       payload.purchaseToken,
       accessToken,
-      { fetchImpl },
+      { fetchImpl, productId: payload.productId },
     );
-    return json(200, { status });
+    if (status !== 'verified' || payload.deviceId === undefined) {
+      return json(200, { status });
+    }
+    // Issue only after fresh Google Play, Play Integrity and D1 checks.
+    const offlineGrant = await issueOfflineGrant(env, {
+      productId: payload.productId,
+      deviceId: payload.deviceId,
+      purchaseTokenHash: hash,
+    }, now());
+    return json(200, { status, offlineGrant });
   } catch {
     // No token, credential, raw Google error or request body in responses/logs.
     return json(503, { status: 'unavailable' });

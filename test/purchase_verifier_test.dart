@@ -8,7 +8,7 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:tts_text_mp3_mobile/services/purchase_verifier.dart';
 
 PurchaseDetails purchase({String token = 'sample-token'}) => PurchaseDetails(
-  productID: 'remove_ads',
+  productID: 'full_access',
   purchaseID: 'order-test',
   verificationData: PurchaseVerificationData(
     localVerificationData: '{}',
@@ -29,7 +29,7 @@ void main() {
       expect(request.url, url);
       final body = jsonDecode(request.body) as Map<String, dynamic>;
       expect(body['purchaseToken'], 'sample-token');
-      expect(body['productId'], 'remove_ads');
+      expect(body['productId'], 'full_access');
       expect(body['packageName'], billingPackageName);
       expect(body['integrityToken'], 'mock-integrity-token');
       expect(body['requestId'], matches(r'^[a-f0-9]{32}$'));
@@ -38,7 +38,7 @@ void main() {
           jsonEncode([
             'yomipalette:/verify:v1',
             billingPackageName,
-            'remove_ads',
+            'full_access',
             sha256.convert(utf8.encode('sample-token')).toString(),
             body['requestId'],
           ]),
@@ -130,6 +130,57 @@ void main() {
     );
     verifier.dispose();
     client.close();
+  });
+
+  test('device-bound v2 Play Integrity hash returns signed grant', () async {
+    final device = 'A' * 43;
+    final hashes = <String>[];
+    final client = MockClient((request) async {
+      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      expect(body['deviceId'], device);
+      expect(body['productId'], 'full_access');
+      final digest = sha256
+          .convert(
+            utf8.encode(
+              jsonEncode([
+                'yomipalette:/verify:v2',
+                billingPackageName,
+                'full_access',
+                sha256.convert(utf8.encode('sample-token')).toString(),
+                body['requestId'],
+                device,
+              ]),
+            ),
+          )
+          .toString();
+      expect(hashes.single, digest);
+      return http.Response(
+        jsonEncode({'status': 'verified', 'offlineGrant': 'a.b'}),
+        200,
+      );
+    });
+    final verifier = BackendPurchaseVerifier(
+      endpoint: url,
+      client: client,
+      integrityToken: (hash) async {
+        hashes.add(hash);
+        return 'mock-integrity-token';
+      },
+    );
+    final outcome = await verifier.verifyForDevice(purchase(), device);
+    expect(outcome.result, PurchaseVerificationResult.verified);
+    expect(outcome.offlineGrant, 'a.b');
+    verifier.dispose();
+  });
+
+  test('invalid device ID cannot request a grant', () async {
+    final verifier = BackendPurchaseVerifier(
+      endpoint: url,
+      client: MockClient((_) async => fail('No HTTP allowed')),
+    );
+    final result = await verifier.verifyForDevice(purchase(), 'wrong');
+    expect(result.result, PurchaseVerificationResult.unavailable);
+    verifier.dispose();
   });
 
   test('non-HTTPS verifier endpoint is forbidden', () {

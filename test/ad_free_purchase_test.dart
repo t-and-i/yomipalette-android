@@ -8,7 +8,8 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tts_text_mp3_mobile/screens/home_screen.dart';
 import 'package:tts_text_mp3_mobile/services/ad_free_purchase.dart';
-import 'package:tts_text_mp3_mobile/widgets/ad_free_section.dart';
+import 'package:tts_text_mp3_mobile/services/trial_access.dart';
+import 'package:tts_text_mp3_mobile/widgets/access_purchase_section.dart';
 import 'package:tts_text_mp3_mobile/services/purchase_verifier.dart';
 
 class FakeBilling implements AdFreeBillingGateway {
@@ -121,7 +122,7 @@ void main() {
     await fake.controller.close();
   });
 
-  testWidgets('verified buyers do not see the ad-free purchase section', (
+  testWidgets('verified buyers see active entitlement, not a payment button', (
     tester,
   ) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
@@ -140,11 +141,11 @@ void main() {
     await tester.pumpWidget(screen());
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.text('Remove ads (one-time purchase)'),
+      find.text('Full access (one-time purchase)'),
       250,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.byType(AdFreeSection), findsOneWidget);
+    expect(find.byType(AccessPurchaseSection), findsOneWidget);
 
     await controller.handleUpdates([record(PurchaseStatus.purchased)]);
     expect(controller.isAdFree, isTrue);
@@ -156,8 +157,9 @@ void main() {
       250,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.byType(AdFreeSection), findsNothing);
+    expect(find.byType(AccessPurchaseSection), findsOneWidget);
     expect(find.text('Restore purchases'), findsNothing);
+    expect(find.text('Unlock full access'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     controller.dispose();
@@ -195,6 +197,57 @@ void main() {
     await restored.initialize();
     expect(restored.isAdFree, isTrue);
     restored.dispose();
+  });
+
+  test('old remove_ads receipts still unlock full access', () async {
+    final fake = FakeBilling();
+    final controller = AdFreePurchaseController(
+      gateway: fake,
+      verifier: FakeVerifier(PurchaseVerificationResult.verified),
+    );
+    await controller.initialize();
+    await controller.handleUpdates([
+      record(PurchaseStatus.restored, id: legacyAdFreeProductId),
+    ]);
+    expect(controller.isLicensed, isTrue);
+    controller.dispose();
+    await fake.controller.close();
+  });
+
+  testWidgets('expired trial requires purchase and keeps file settings', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    FlutterSecureStorage.setMockInitialValues({});
+    final start = DateTime.utc(2026, 11, 1);
+    final trial = TrialAccessController(
+      clock: () => start.add(const Duration(days: 31)),
+    );
+    SharedPreferences.setMockInitialValues({
+      TrialAccessController.startedKey: start.millisecondsSinceEpoch,
+    });
+    await trial.initialize();
+    final fake = FakeBilling();
+    final purchase = AdFreePurchaseController(gateway: fake);
+    await purchase.initialize();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeScreen(
+          onLocaleChanged: (_) {},
+          adFreeController: purchase,
+          trialController: trial,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('30-day free trial has ended'), findsOneWidget);
+    expect(find.text('Choose file'), findsOneWidget);
+    expect(find.text('Generate MP3'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    purchase.dispose();
+    trial.dispose();
+    await fake.controller.close();
   });
 
   test('empty receipt does not grant or acknowledge', () async {

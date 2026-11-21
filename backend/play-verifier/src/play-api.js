@@ -1,8 +1,10 @@
 export const PACKAGE_NAME = 'com.tjsongwei.tts_text_mp3_mobile';
-export const PRODUCT_ID = 'remove_ads';
+export const PRODUCT_ID = 'full_access';
+export const LEGACY_PRODUCT_ID = 'remove_ads';
+export const SUPPORTED_PRODUCT_IDS = new Set([PRODUCT_ID, LEGACY_PRODUCT_ID]);
 const API_BASE = 'https://androidpublisher.googleapis.com/androidpublisher/v3/applications';
 
-export function classifyPurchase(purchase) {
+export function classifyPurchase(purchase, expectedProductId = PRODUCT_ID) {
   if (
     !purchase ||
     purchase.purchaseStateContext?.purchaseState !== 'PURCHASED'
@@ -11,7 +13,7 @@ export function classifyPurchase(purchase) {
   }
   if (!Array.isArray(purchase.productLineItem)) return 'rejected';
   const line = purchase.productLineItem.find((item) =>
-    item?.productId === PRODUCT_ID,
+    item?.productId === expectedProductId,
   );
   if (!line) return 'rejected';
   if (line.productOfferDetails?.consumptionState === 'CONSUMPTION_STATE_CONSUMED') {
@@ -30,6 +32,7 @@ export function classifyPurchase(purchase) {
 
 export async function lookupGooglePurchase(purchaseToken, accessToken, {
   fetchImpl = fetch,
+  productId = PRODUCT_ID,
 } = {}) {
   const url =
     `${API_BASE}/${PACKAGE_NAME}/purchases/productsv2/tokens/` +
@@ -48,7 +51,7 @@ export async function lookupGooglePurchase(purchaseToken, accessToken, {
   } catch {
     throw new Error('Google Play purchase response invalid.');
   }
-  return classifyPurchase(purchase);
+  return classifyPurchase(purchase, productId);
 }
 
 export async function listVoidedPurchases(accessToken, {

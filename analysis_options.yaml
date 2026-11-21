@@ -1,4 +1,8 @@
 analyzer:
+  # Flutter 3.50 temporarily deprecates core Material/Cupertino imports.
+  # Revisit when compatible material_ui / cupertino_ui packages stabilize.
+  errors:
+    deprecated_member_use: ignore
   exclude:
     - build/**
     - android/**

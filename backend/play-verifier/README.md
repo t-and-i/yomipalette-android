@@ -145,12 +145,12 @@ Cloudflare WorkersとD1の利用方針で進める場合、以下の設定を整
 
 5. Google Play Console「収益化のセットアップ」でRTDNを有効にし、トピックIDを設定します。YomiPaletteでは **定期購入と1回限りの商品のすべての通知** を選びます。テスト通知後、受信・認証・D1更新を確認します。
 6. Pub/Subの再試行・Dead Letter Topic・監視を追加してください。署名付きJWTの公開鍵取得失敗／Google API障害／D1障害では503で再送を要求します。
-7. 公開`/verify`のレート制限はローカル実装済みですが、実環境での防御効果は未検証です。購入トークンの第三者再利用防止とオフライン権利設計は未完了です。**Workerの本番公開は引き続き禁止**します。
+7. 2026-11-21時点、購入検証Workerは本番運用済みです。`full_access` テストカード購入・返金・復元が確認されています。新しい署名付きオフラインキャッシュのコードは追加済みですが、Worker秘密鍵の設定と公開鍵の合致を確認し、Play経由の実機検証が済むまで**新バージョンの本番公開は行わないでください**。
 
 参考: https://developer.android.com/google/play/billing/getting-ready 、
 https://docs.cloud.google.com/pubsub/docs/authenticate-push-subscriptions
 
-## 購入検証APIのレート制限（ローカル実装済み、未デプロイ）
+## 購入検証APIのレート制限（実装済み）
 
 `POST /verify` は、Google Play APIへの無制限の外部アクセスを避けるため、Cloudflare Workers Rate Limiting APIを利用します。設定は `wrangler.example.jsonc` にあります。
 
@@ -174,9 +174,9 @@ https://developer.android.com/google/play/integrity/standard
 - **RTDN未接続**：現状は6時間周期のVoided Purchases APIによるポーリングだけです。返金後すぐに失効しない時間帯があります。GoogleはRTDNとVoided Purchases APIの併用を推奨しています。
 - **購入トークン再利用への耐性**：ユーザーアカウントがないため、Play Integrityを通過しても、漏えいした購入トークンを提示した人が購入者本人かどうかは確認できません。
 - **API濫用防止**：Rate Limiting APIのIP・トークン単位制限はローカル実装済みですが、Cloudflare本番運用での防御効果・ログ・アラートは未検証です。必要に応じWAFも併用します。Cloudflare Accessの対話型ログインを強制するとアプリから使用できません。
-- **オフライン権利**：アプリは署名付きオフライン権利キャッシュ未実装です。起動後の購入確認にはネットワーク接続が必要です。
+- **オフライン権利**：Ed25519署名付き72時間キャッシュのコード・ユニットテストは実装済みで、ステージングWorkerへ配置済みです。本番鍵の配布とGoogle Play経由の実機試験は未実施です。詳細は `../../docs/offline_entitlement.md`。
 - **プライバシー/データセーフティ**：購入トークンをGoogleと検証バックエンドが取り扱うため、正式公開前にプライバシーポリシー・Play Consoleの申告を見直す必要があります。
-- **本物のAPI疎通未検証**：Google Play Consoleのサービスアカウント権限、Cloudflare D1、Secrets Storeの設定は完了しましたが、Workerは未作成・未デプロイで、Google Play API実通信は未実施です。テストはすべてモックです。
+- **署名付きオフライン権利の実機疎通未検証**：以前のCloudflare本番WorkerでGoogle Play実購入・返金の検証を完了しています。今回の署名付きトークンの発行・端末保存・通信遮断・有効期限・再オンライン検証をPlay配布版で行う試験は未実施です。
 
 ## 参照
 
