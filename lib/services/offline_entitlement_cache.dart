@@ -5,6 +5,8 @@ import 'package:cryptography/cryptography.dart';
 import 'package:crypto/crypto.dart' as hashes;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'entitlement_diagnostics.dart';
+
 const offlineGrantPublicKey = String.fromEnvironment(
   'YOMIPALETTE_OFFLINE_GRANT_PUBLIC_KEY',
 );
@@ -77,11 +79,13 @@ class SignedOfflineEntitlementStore implements OfflineEntitlementStore {
     final existing = await _storage.read(key: _deviceKey);
     if (existing != null && _validDeviceId(existing)) {
       _deviceId = existing;
+      entitlementTrace(EntitlementEvent.storageDeviceReused);
       return existing;
     }
     final generated = _randomDeviceId();
     await _storage.write(key: _deviceKey, value: generated);
     _deviceId = generated;
+    entitlementTrace(EntitlementEvent.storageDeviceCreated);
     return generated;
   }
 
@@ -91,10 +95,23 @@ class SignedOfflineEntitlementStore implements OfflineEntitlementStore {
     _lastSeenMs = int.tryParse(await _storage.read(key: _lastSeenKey) ?? '');
     final saved = await _storage.read(key: _grantKey);
     _claims = saved == null ? null : await _validate(saved);
-    if (saved != null && _claims == null) {
+    if (saved == null) {
+      entitlementTrace(EntitlementEvent.storedGrantMissing);
+    } else if (_claims == null) {
+      entitlementTrace(EntitlementEvent.storedGrantInvalid);
       await _storage.delete(key: _grantKey);
+    } else {
+      entitlementTrace(EntitlementEvent.storedGrantValid);
     }
     await refresh();
+    if (_claims != null) {
+      entitlementTrace(
+        hasValidGrant
+            ? EntitlementEvent.storedGrantUsable
+            : EntitlementEvent.storedGrantUnusable,
+      );
+    }
+    entitlementTrace(EntitlementEvent.storageInitSucceeded);
   }
 
   @override
@@ -130,13 +147,28 @@ class SignedOfflineEntitlementStore implements OfflineEntitlementStore {
     if (claims == null ||
         _clock().toUtc().millisecondsSinceEpoch >=
             (claims['exp'] as int) * 1000) {
+      entitlementTrace(EntitlementEvent.grantRejected);
       return false;
     }
     await refresh();
-    if (_clockRollback) return false;
+    if (_clockRollback) {
+      entitlementTrace(EntitlementEvent.grantClockInvalid);
+      return false;
+    }
     await _storage.write(key: _grantKey, value: signedGrant);
+    entitlementTrace(EntitlementEvent.grantWriteSucceeded);
+    if (entitlementDiagnosticsEnabled) {
+      final saved = await _storage.read(key: _grantKey);
+      if (saved != signedGrant) {
+        entitlementTrace(EntitlementEvent.grantReadbackFailed);
+        return false;
+      }
+      entitlementTrace(EntitlementEvent.grantReadbackSucceeded);
+    }
     _claims = claims;
-    return hasValidGrant;
+    final valid = hasValidGrant;
+    if (valid) entitlementTrace(EntitlementEvent.grantAccepted);
+    return valid;
   }
 
   @override
@@ -152,16 +184,25 @@ class SignedOfflineEntitlementStore implements OfflineEntitlementStore {
     }
     // Only re-send this encrypted receipt to the authenticated Worker to
     // refresh/revoke an already verified grant. It is never proof by itself.
-    await _storage.write(
-      key: _cachedPurchaseKey,
-      value: jsonEncode({'productId': productId, 'token': token}),
-    );
+    final serialized = jsonEncode({'productId': productId, 'token': token});
+    await _storage.write(key: _cachedPurchaseKey, value: serialized);
+    entitlementTrace(EntitlementEvent.receiptWriteSucceeded);
+    if (entitlementDiagnosticsEnabled) {
+      if (await _storage.read(key: _cachedPurchaseKey) != serialized) {
+        entitlementTrace(EntitlementEvent.receiptReadbackFailed);
+        throw StateError('Encrypted purchase write verification failed.');
+      }
+      entitlementTrace(EntitlementEvent.receiptReadbackSucceeded);
+    }
   }
 
   @override
   Future<CachedPurchase?> getCachedPurchase() async {
     final saved = await _storage.read(key: _cachedPurchaseKey);
-    if (saved == null || _claims == null) return null;
+    if (saved == null || _claims == null) {
+      entitlementTrace(EntitlementEvent.receiptMissing);
+      return null;
+    }
     try {
       final decoded = jsonDecode(saved);
       if (decoded is! Map<String, dynamic> ||
@@ -174,8 +215,10 @@ class SignedOfflineEntitlementStore implements OfflineEntitlementStore {
       final token = decoded['token'] as String;
       final digest = hashes.sha256.convert(utf8.encode(token)).toString();
       if (digest != _claims!['receiptHash']) return null;
+      entitlementTrace(EntitlementEvent.receiptFound);
       return CachedPurchase(decoded['productId'] as String, token);
     } catch (_) {
+      entitlementTrace(EntitlementEvent.receiptInvalid);
       return null;
     }
   }
@@ -185,6 +228,7 @@ class SignedOfflineEntitlementStore implements OfflineEntitlementStore {
     _claims = null;
     await _storage.delete(key: _grantKey);
     await _storage.delete(key: _cachedPurchaseKey);
+    entitlementTrace(EntitlementEvent.receiptCleared);
     // Preserve device ID and high-water clock to prevent cache replay.
   }
 
@@ -193,30 +237,43 @@ class SignedOfflineEntitlementStore implements OfflineEntitlementStore {
         _keyId.isEmpty ||
         _publicKeyBase64.isEmpty ||
         _deviceId == null) {
+      entitlementTrace(EntitlementEvent.grantMalformed);
       return null;
     }
     final parts = token.split('.');
     if (parts.length != 2 ||
         parts.any((p) => !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(p))) {
+      entitlementTrace(EntitlementEvent.grantMalformed);
       return null;
     }
     try {
       final publicBytes = base64Url.decode(
         base64Url.normalize(_publicKeyBase64),
       );
-      if (publicBytes.length != 32) return null;
+      if (publicBytes.length != 32) {
+        entitlementTrace(EntitlementEvent.grantMalformed);
+        return null;
+      }
       final payload = base64Url.decode(base64Url.normalize(parts[0]));
       final signature = base64Url.decode(base64Url.normalize(parts[1]));
-      if (signature.length != 64 || payload.length > 2048) return null;
+      if (signature.length != 64 || payload.length > 2048) {
+        entitlementTrace(EntitlementEvent.grantMalformed);
+        return null;
+      }
       final key = SimplePublicKey(publicBytes, type: KeyPairType.ed25519);
       if (!await Ed25519().verify(
         payload,
         signature: Signature(signature, publicKey: key),
       )) {
+        entitlementTrace(EntitlementEvent.grantSignatureInvalid);
         return null;
       }
+      entitlementTrace(EntitlementEvent.grantSignatureValid);
       final json = jsonDecode(utf8.decode(payload));
-      if (json is! Map<String, dynamic>) return null;
+      if (json is! Map<String, dynamic>) {
+        entitlementTrace(EntitlementEvent.grantClaimsInvalid);
+        return null;
+      }
       final iat = json['iat'];
       final exp = json['exp'];
       if (json['v'] != 1 ||
@@ -230,14 +287,18 @@ class SignedOfflineEntitlementStore implements OfflineEntitlementStore {
           iat is! int ||
           exp is! int ||
           exp - iat != offlineGrantLifetime.inSeconds) {
+        entitlementTrace(EntitlementEvent.grantClaimsInvalid);
         return null;
       }
       final now = _clock().toUtc().millisecondsSinceEpoch;
       if (iat * 1000 > now + _allowedClockSkew.inMilliseconds) {
+        entitlementTrace(EntitlementEvent.grantClockInvalid);
         return null;
       }
+      entitlementTrace(EntitlementEvent.grantClaimsValid);
       return json;
     } catch (_) {
+      entitlementTrace(EntitlementEvent.grantMalformed);
       return null;
     }
   }

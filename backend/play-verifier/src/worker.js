@@ -16,6 +16,15 @@ import {
 
 const MAX_REQUEST_BYTES = 32768;
 
+// Internal-test opt-in only. Fixed codes; never log grants, receipts, keys,
+// request bodies, device identifiers or exception objects.
+function traceGrant(env, code) {
+  if (env.OFFLINE_GRANT_DIAGNOSTICS !== '1') return;
+  if (code !== 'grant_issued' && code !== 'grant_signing_failed' &&
+      code !== 'verified_without_device') return;
+  console.info('YP_ENTITLEMENT_WORKER ' + code);
+}
+
 function json(status, value) {
   return new Response(JSON.stringify(value), {
     status,
@@ -129,15 +138,22 @@ export async function handleRequest(request, env, {
       { fetchImpl, productId: payload.productId },
     );
     if (status !== 'verified' || payload.deviceId === undefined) {
+      if (status === 'verified') traceGrant(env, 'verified_without_device');
       return json(200, { status });
     }
     // Issue only after fresh Google Play, Play Integrity and D1 checks.
-    const offlineGrant = await issueOfflineGrant(env, {
-      productId: payload.productId,
-      deviceId: payload.deviceId,
-      purchaseTokenHash: hash,
-    }, now());
-    return json(200, { status, offlineGrant });
+    try {
+      const offlineGrant = await issueOfflineGrant(env, {
+        productId: payload.productId,
+        deviceId: payload.deviceId,
+        purchaseTokenHash: hash,
+      }, now());
+      traceGrant(env, 'grant_issued');
+      return json(200, { status, offlineGrant });
+    } catch {
+      traceGrant(env, 'grant_signing_failed');
+      throw new Error('Offline grant issuance failed.');
+    }
   } catch {
     // No token, credential, raw Google error or request body in responses/logs.
     return json(503, { status: 'unavailable' });

@@ -21,6 +21,13 @@ cd "$repo"
 marker="$(mktemp)"
 trap 'rm -f "$marker"' EXIT
 args=(build appbundle --release "--dart-define=YOMIPALETTE_BILLING_VERIFY_URL=$url" "--dart-define=YOMIPALETTE_PLAY_INTEGRITY_PROJECT_NUMBER=$project" "--dart-define=YOMIPALETTE_OFFLINE_GRANT_PUBLIC_KEY=$offline_key" "--dart-define=YOMIPALETTE_OFFLINE_GRANT_KEY_ID=$offline_key_id")
+# Opt-in, fixed-code diagnostic logging for INTERNAL TEST builds only.
+if [[ "${YOMIPALETTE_ENTITLEMENT_DIAGNOSTICS:-0}" == 1 ]]; then
+  args+=("--dart-define=YOMIPALETTE_ENTITLEMENT_DIAGNOSTICS=true")
+elif [[ "${YOMIPALETTE_ENTITLEMENT_DIAGNOSTICS:-0}" != 0 ]]; then
+  echo 'YOMIPALETTE_ENTITLEMENT_DIAGNOSTICS must be 0 or 1.' >&2
+  exit 1
+fi
 if [[ -n "${YOMIPALETTE_BUILD_NUMBER:-}" ]]; then
   [[ "$YOMIPALETTE_BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo 'Invalid build number.' >&2; exit 1; }
   args+=("--build-number=$YOMIPALETTE_BUILD_NUMBER")
@@ -37,3 +44,6 @@ actual="$(keytool -J-Duser.language=en -J-Duser.country=US -printcert -rfc -jarf
 echo "Verified Play upload bundle: $bundle"
 sha256sum "$bundle"
 echo 'Not uploaded to Play Console.'
+if [[ "${YOMIPALETTE_ENTITLEMENT_DIAGNOSTICS:-0}" == 1 ]]; then
+  echo 'INTERNAL TEST DIAGNOSTICS ENABLED: Do not promote this AAB to public Play.'
+fi

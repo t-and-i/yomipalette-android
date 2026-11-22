@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'purchase_verifier.dart';
 import 'offline_entitlement_cache.dart';
+import 'entitlement_diagnostics.dart';
 
 /// New permanent license; retain existing remove_ads purchases as grandfathered.
 const fullAccessProductId = 'full_access';
@@ -144,6 +145,7 @@ class AdFreePurchaseController extends ChangeNotifier {
           _offlineReady = true;
         } catch (_) {
           // Online billing is still available if encrypted storage fails.
+          entitlementTrace(EntitlementEvent.storageInitFailed);
           _offlineReady = false;
         }
       }
@@ -206,6 +208,7 @@ class AdFreePurchaseController extends ChangeNotifier {
 
   Future<void> restorePurchases() async {
     if (!_available || _busy) return;
+    entitlementTrace(EntitlementEvent.restoreRequested);
     _message = null;
     _notify();
     try {
@@ -246,11 +249,15 @@ class AdFreePurchaseController extends ChangeNotifier {
     if (_offlineReady && _verifier is OfflineGrantPurchaseVerifier) {
       try {
         final deviceId = await _offline.getDeviceId();
+        entitlementTrace(EntitlementEvent.verifyDeviceScoped);
         return await (_verifier as OfflineGrantPurchaseVerifier)
             .verifyForDevice(purchase, deviceId);
       } catch (_) {
         // Fallback to the existing online-only verification protocol.
+        entitlementTrace(EntitlementEvent.verifyLegacyFallback);
       }
+    } else {
+      entitlementTrace(EntitlementEvent.verifyLegacyFallback);
     }
     return PurchaseVerificationOutcome(await _verifier.verify(purchase));
   }
@@ -264,10 +271,15 @@ class AdFreePurchaseController extends ChangeNotifier {
       try {
         if (await _offline.accept(grant)) {
           await _offline.rememberPurchase(productId, receipt);
+        } else {
+          entitlementTrace(EntitlementEvent.grantRejected);
         }
       } catch (_) {
         // Failed storage/signature verification never grants offline access.
+        entitlementTrace(EntitlementEvent.grantSaveFailed);
       }
+    } else {
+      entitlementTrace(EntitlementEvent.grantSaveSkipped);
     }
   }
 
@@ -285,6 +297,7 @@ class AdFreePurchaseController extends ChangeNotifier {
     }
     final cached = await _offline.getCachedPurchase();
     if (cached == null) return;
+    entitlementTrace(EntitlementEvent.cachedRecheckStarted);
     _checkingCachedPurchase = true;
     _lastCachedRecheck = now;
     try {
@@ -303,6 +316,7 @@ class AdFreePurchaseController extends ChangeNotifier {
       if (_disposed) return;
       switch (outcome.result) {
         case PurchaseVerificationResult.verified:
+          entitlementTrace(EntitlementEvent.cachedRecheckVerified);
           await _saveVerifiedGrant(
             outcome.offlineGrant,
             cached.productId,
@@ -313,6 +327,7 @@ class AdFreePurchaseController extends ChangeNotifier {
           _message = null;
           break;
         case PurchaseVerificationResult.rejected:
+          entitlementTrace(EntitlementEvent.cachedRecheckRejected);
           _owned = false;
           _onlineVerifiedAt = null;
           await _offline.clear();
@@ -323,6 +338,7 @@ class AdFreePurchaseController extends ChangeNotifier {
           _message = 'Google Play purchase verification was rejected.';
           break;
         case PurchaseVerificationResult.unavailable:
+          entitlementTrace(EntitlementEvent.cachedRecheckUnavailable);
           // Keep only the unexpired signed grant; do not extend its TTL.
           break;
       }
@@ -366,6 +382,7 @@ class AdFreePurchaseController extends ChangeNotifier {
           final prefs = await SharedPreferences.getInstance();
           switch (verification.result) {
             case PurchaseVerificationResult.verified:
+              entitlementTrace(EntitlementEvent.purchaseEventVerified);
               if (billingQaMode) {
                 await prefs.setBool(_qaEntitlementKey, true);
               }
@@ -391,6 +408,7 @@ class AdFreePurchaseController extends ChangeNotifier {
               }
               break;
             case PurchaseVerificationResult.rejected:
+              entitlementTrace(EntitlementEvent.purchaseEventRejected);
               _owned = false;
               _onlineVerifiedAt = null;
               if (_offlineReady) {
@@ -407,6 +425,7 @@ class AdFreePurchaseController extends ChangeNotifier {
               _message = 'Google Play purchase verification was rejected.';
               break;
             case PurchaseVerificationResult.unavailable:
+              entitlementTrace(EntitlementEvent.purchaseEventUnavailable);
               // Do not grant, revoke, or acknowledge on a transient backend
               // failure. Restore will retry when verification is available.
               _busy = false;

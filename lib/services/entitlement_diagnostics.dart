@@ -1,0 +1,69 @@
+import 'package:flutter/foundation.dart';
+
+/// Enable only in a signed INTERNAL TEST build. Never log receipts, keys,
+/// device IDs, signed grants, request bodies or exceptions.
+const bool entitlementDiagnosticsEnabled = bool.fromEnvironment(
+  'YOMIPALETTE_ENTITLEMENT_DIAGNOSTICS',
+  defaultValue: false,
+);
+
+/// Fixed event names are deliberately the *only* possible diagnostic values.
+enum EntitlementEvent {
+  storageDeviceReused,
+  storageDeviceCreated,
+  storageInitSucceeded,
+  storageInitFailed,
+  storedGrantMissing,
+  storedGrantValid,
+  storedGrantInvalid,
+  storedGrantUsable,
+  storedGrantUnusable,
+  grantMalformed,
+  grantSignatureInvalid,
+  grantSignatureValid,
+  grantClaimsInvalid,
+  grantClaimsValid,
+  grantClockInvalid,
+  grantRejected,
+  grantWriteSucceeded,
+  grantReadbackSucceeded,
+  grantReadbackFailed,
+  grantAccepted,
+  receiptWriteSucceeded,
+  receiptReadbackSucceeded,
+  receiptReadbackFailed,
+  receiptFound,
+  receiptMissing,
+  receiptInvalid,
+  receiptCleared,
+  verifyDeviceScoped,
+  verifyLegacyFallback,
+  verifyMissingReceipt,
+  verifyIntegrityReady,
+  verifyIntegrityUnavailable,
+  verifyWorkerRequest,
+  verifyWorkerHttpFailed,
+  verifyWorkerResponseInvalid,
+  verifyWorkerSignedGrantPresent,
+  verifyWorkerSignedGrantMissing,
+  verifyWorkerRejected,
+  verifyWorkerUnavailable,
+  verifyException,
+  grantSaveSkipped,
+  grantSaveFailed,
+  cachedRecheckStarted,
+  cachedRecheckVerified,
+  cachedRecheckRejected,
+  cachedRecheckUnavailable,
+  purchaseEventVerified,
+  purchaseEventRejected,
+  purchaseEventUnavailable,
+  restoreRequested,
+}
+
+void entitlementTrace(EntitlementEvent event) {
+  // Enum-only logging prevents accidental interpolation of sensitive data.
+  if (entitlementDiagnosticsEnabled) {
+    debugPrint('YP_ENTITLEMENT ${event.name}');
+  }
+}

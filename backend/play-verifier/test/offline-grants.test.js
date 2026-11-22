@@ -175,3 +175,38 @@ test('invalid signer configuration cannot issue a grant', async () => {
   }, NOW);
   assert.equal(decodeGrant(valid).exp, NOW / 1000 + 259200);
 });
+
+test('diagnostic logging is opt-in, fixed-code only, and never reveals identities', async () => {
+  const messages = [];
+  const original = console.info;
+  console.info = (msg) => messages.push(msg);
+  try {
+    const disabled = context();
+    await handleRequest(makeRequest(), disabled.env, disabled.deps);
+    assert.deepEqual(messages, []);
+
+    const enabled = context();
+    enabled.env.OFFLINE_GRANT_DIAGNOSTICS = '1';
+    assert.equal((await handleRequest(makeRequest(), enabled.env, enabled.deps)).status, 200);
+
+    const legacy = context({ legacy: true });
+    legacy.env.OFFLINE_GRANT_DIAGNOSTICS = '1';
+    assert.equal((await handleRequest(makeRequest({ legacy: true }), legacy.env, legacy.deps)).status, 200);
+
+    const missing = context({ signer: false });
+    missing.env.OFFLINE_GRANT_DIAGNOSTICS = '1';
+    assert.equal((await handleRequest(makeRequest(), missing.env, missing.deps)).status, 503);
+    assert.deepEqual(messages, [
+      'YP_ENTITLEMENT_WORKER grant_issued',
+      'YP_ENTITLEMENT_WORKER verified_without_device',
+      'YP_ENTITLEMENT_WORKER grant_signing_failed',
+    ]);
+    for (const msg of messages) {
+      assert.equal(msg.includes(TOKEN), false);
+      assert.equal(msg.includes(DEVICE_ID), false);
+      assert.equal(msg.includes(SIGNER.OFFLINE_GRANT_PRIVATE_KEY_PKCS8), false);
+    }
+  } finally {
+    console.info = original;
+  }
+});
