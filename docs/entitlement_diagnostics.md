@@ -119,3 +119,26 @@ and the purchase screen must still show permanent access.
 
 This is a source-based diagnosis, not yet a confirmed resolution until
 the S9 Play-installed 0.2.8 test passes.
+
+## Concurrent offline entitlement writes — internal 0.2.9 (17)
+
+S9 Play-installed 0.2.8 logged `grantReadbackFailed` during an online
+restore / cached-receipt verification overlap. Both operations independently
+validated and wrote signed grants to the same encrypted preference key.
+
+The `AdFreePurchaseController` now schedules Play purchase notifications
+and cached-purchase revalidations on a *single* future queue. Each scheduled
+operation covers Worker verification plus any signed grant write, encrypted
+purchase receipt write, or rejection-driven cache clear. In particular, a
+cached verifier result cannot be applied over a later Play rejection merely
+because both callbacks started concurrently. Failed tasks do not poison
+the queue. Ed25519 signing, the 72-hour absolute expiry, encrypted
+storage mode, and conservative offline-failure semantics remain unchanged.
+
+Regression coverage includes a delayed Worker response followed by a
+Play rejection (the final state must be revoked) and overlapping successful
+restores (maximum concurrent verification is one). Before promoting any
+release, install 0.2.9 via Play internal testing, trigger an online restore
+and fresh cached recheck, and verify there is no `grantReadbackFailed`
+or `receiptReadbackFailed` diagnostic. Repeat an offline cold restart.
+As with 0.2.8, **the diagnostic-enabled AAB must not be promoted to public**.

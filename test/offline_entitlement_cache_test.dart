@@ -130,6 +130,38 @@ class _FakeSignerVerifier
   void dispose() {}
 }
 
+/// Holds one completed Worker response so another event can arrive while the
+/// first caller is suspended. This models overlapping Play and cached rechecks.
+class _HeldVerifier extends _FakeSignerVerifier {
+  _HeldVerifier(super.keyPair, super.clock);
+
+  final entered = Completer<void>();
+  final release = Completer<void>();
+  bool pauseNext = false;
+  int inFlight = 0;
+  int maxInFlight = 0;
+
+  @override
+  Future<PurchaseVerificationOutcome> verifyForDevice(
+    PurchaseDetails purchase,
+    String deviceId,
+  ) async {
+    inFlight++;
+    if (inFlight > maxInFlight) maxInFlight = inFlight;
+    try {
+      final outcome = await super.verifyForDevice(purchase, deviceId);
+      if (pauseNext) {
+        pauseNext = false;
+        entered.complete();
+        await release.future;
+      }
+      return outcome;
+    } finally {
+      inFlight--;
+    }
+  }
+}
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -382,6 +414,119 @@ void main() {
       );
       expect(await cache.accept(grant), true);
       expect(cache.hasValidGrant, true);
+    },
+  );
+
+  test(
+    'cached recheck and Play revocation share one verification queue',
+    () async {
+      var now = _referenceTime;
+      final keys = await _algorithm.newKeyPair();
+      final pub = _encode((await keys.extractPublicKey()).bytes);
+      final store = SignedOfflineEntitlementStore(
+        publicKeyBase64: pub,
+        keyId: 'test-key-1',
+        clock: () => now,
+      );
+      await store.initialize();
+      final initialGrant = await _sign(
+        keyPair: keys,
+        deviceId: await store.getDeviceId(),
+        issued: now,
+        receiptToken: 'fake-google-play-receipt-token',
+      );
+      expect(await store.accept(initialGrant), true);
+      await store.rememberPurchase(
+        'full_access',
+        'fake-google-play-receipt-token',
+      );
+
+      final verifier = _HeldVerifier(keys, () => now);
+      final billing = _FakeBilling();
+      final controller = AdFreePurchaseController(
+        gateway: billing,
+        verifier: verifier,
+        offlineStore: store,
+        clock: () => now,
+      );
+      await controller.initialize();
+      expect(store.hasValidGrant, true);
+
+      // A cached validation starts first and receives a verified grant, but
+      // remains in flight while a Play rejection arrives. The rejection must
+      // execute last; an older validation must not resurrect revoked access.
+      verifier.pauseNext = true;
+      final refreshing = controller.restorePurchases();
+      await verifier.entered.future;
+      verifier.current = PurchaseVerificationResult.rejected;
+      final rejecting = controller.handleUpdates([_receipt()]);
+      await Future<void>.delayed(Duration.zero);
+      expect(verifier.maxInFlight, 1);
+      verifier.release.complete();
+      await Future.wait([refreshing, rejecting]);
+      expect(verifier.maxInFlight, 1);
+      expect(store.hasValidGrant, false);
+      expect(await store.getCachedPurchase(), null);
+      expect(controller.isLicensed, false);
+
+      controller.dispose();
+      await billing.events.close();
+    },
+  );
+
+  test(
+    'simultaneous cached validation and Play restoration do not overlap',
+    () async {
+      final keys = await _algorithm.newKeyPair();
+      final pub = _encode((await keys.extractPublicKey()).bytes);
+      final store = SignedOfflineEntitlementStore(
+        publicKeyBase64: pub,
+        keyId: 'test-key-1',
+        clock: () => _referenceTime,
+      );
+      await store.initialize();
+      expect(
+        await store.accept(
+          await _sign(
+            keyPair: keys,
+            deviceId: await store.getDeviceId(),
+            issued: _referenceTime,
+            receiptToken: 'fake-google-play-receipt-token',
+          ),
+        ),
+        true,
+      );
+      await store.rememberPurchase(
+        'full_access',
+        'fake-google-play-receipt-token',
+      );
+
+      final verifier = _HeldVerifier(keys, () => _referenceTime);
+      final billing = _FakeBilling();
+      final controller = AdFreePurchaseController(
+        gateway: billing,
+        verifier: verifier,
+        offlineStore: store,
+        clock: () => _referenceTime,
+      );
+      await controller.initialize();
+
+      verifier.pauseNext = true;
+      final refreshing = controller.restorePurchases();
+      await verifier.entered.future;
+      final restoring = controller.handleUpdates([_receipt()]);
+      await Future<void>.delayed(Duration.zero);
+      expect(verifier.maxInFlight, 1);
+      verifier.release.complete();
+      await Future.wait([refreshing, restoring]);
+      expect(verifier.maxInFlight, 1);
+      expect(store.hasValidGrant, true);
+      expect(
+        (await store.getCachedPurchase())?.token,
+        'fake-google-play-receipt-token',
+      );
+      controller.dispose();
+      await billing.events.close();
     },
   );
 }

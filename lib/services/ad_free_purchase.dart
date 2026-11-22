@@ -80,7 +80,9 @@ class AdFreePurchaseController extends ChangeNotifier {
   DateTime? _lastCachedRecheck;
   bool _checkingCachedPurchase = false;
   StreamSubscription<List<PurchaseDetails>>? _updates;
-  Future<void> _updateTail = Future<void>.value();
+  // Purchase events, cached-receipt rechecks and entitlement revocations must
+  // not race on the same signed grant / encrypted receipt.
+  Future<void> _entitlementTail = Future<void>.value();
   final Set<String> _acknowledgedTokens = {};
   bool _disposed = false;
   bool _initialized = false;
@@ -283,7 +285,24 @@ class AdFreePurchaseController extends ChangeNotifier {
     }
   }
 
-  Future<void> _revalidateCachedPurchase({bool force = false}) async {
+  // The queue covers the *whole* verification + mutation operation: serializing
+  // only the storage write would permit stale verification results to race a
+  // later rejection. Errors cannot poison subsequent operations.
+  Future<void> _serializeEntitlement(Future<void> Function() operation) {
+    final pending = _entitlementTail.then((_) => operation());
+    _entitlementTail = pending.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace __) {},
+    );
+    return pending;
+  }
+
+  Future<void> _revalidateCachedPurchase({bool force = false}) =>
+      _serializeEntitlement(
+        () => _revalidateCachedPurchaseSerial(force: force),
+      );
+
+  Future<void> _revalidateCachedPurchaseSerial({bool force = false}) async {
     if (!_offlineReady ||
         _verifier is! OfflineGrantPurchaseVerifier ||
         _checkingCachedPurchase) {
@@ -353,12 +372,14 @@ class AdFreePurchaseController extends ChangeNotifier {
   /// Serialize notifications, including overlapping batches from Play.
   /// A rejected Future must not poison later purchase notifications.
   Future<void> handleUpdates(List<PurchaseDetails> purchases) {
-    final next = _updateTail.then((_) => _applyUpdates(purchases));
-    _updateTail = next.catchError((Object _) {
-      _busy = false;
-      _message = 'Unable to process purchase updates.';
-      _notify();
-    });
+    final next = _serializeEntitlement(() => _applyUpdates(purchases));
+    unawaited(
+      next.catchError((Object _) {
+        _busy = false;
+        _message = 'Unable to process purchase updates.';
+        _notify();
+      }),
+    );
     return next;
   }
 
