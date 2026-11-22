@@ -529,4 +529,157 @@ void main() {
       await billing.events.close();
     },
   );
+
+  test(
+    'strict 72h boundary, cold restart, signed replay, and rollback',
+    () async {
+      var now = _referenceTime;
+      final keyPair = await _algorithm.newKeyPair();
+      final publicKey = _encode((await keyPair.extractPublicKey()).bytes);
+      SignedOfflineEntitlementStore makeStore() =>
+          SignedOfflineEntitlementStore(
+            publicKeyBase64: publicKey,
+            keyId: 'test-key-1',
+            clock: () => now,
+          );
+      final cache = makeStore();
+      await cache.initialize();
+      final deviceId = await cache.getDeviceId();
+      final grant = await _sign(
+        keyPair: keyPair,
+        deviceId: deviceId,
+        issued: _referenceTime,
+      );
+      expect(await cache.accept(grant), true);
+      now = _referenceTime.add(
+        const Duration(hours: 71, minutes: 59, seconds: 59, milliseconds: 999),
+      );
+      await cache.refresh();
+      final before = makeStore();
+      await before.initialize();
+      expect(before.hasValidGrant, true);
+      expect(await before.getDeviceId(), deviceId);
+      now = _referenceTime.add(offlineGrantLifetime);
+      expect(before.hasValidGrant, false);
+      await before.refresh();
+      final atBoundary = makeStore();
+      await atBoundary.initialize();
+      expect(atBoundary.hasValidGrant, false);
+      now = _referenceTime.add(const Duration(hours: 73));
+      await atBoundary.refresh();
+      final after = makeStore();
+      await after.initialize();
+      expect(after.hasValidGrant, false);
+      expect(await after.accept(grant), false);
+      // Advancing past expiry then rolling back the wall clock does not revive it.
+      now = _referenceTime.add(const Duration(hours: 71));
+      expect(after.hasValidGrant, false);
+      final rolledBack = makeStore();
+      await rolledBack.initialize();
+      expect(rolledBack.hasValidGrant, false);
+    },
+  );
+
+  test('rollback threshold is 60s and never changes signed expiry', () async {
+    var now = _referenceTime;
+    final keys = await _algorithm.newKeyPair();
+    final publicKey = _encode((await keys.extractPublicKey()).bytes);
+    SignedOfflineEntitlementStore makeStore() => SignedOfflineEntitlementStore(
+      publicKeyBase64: publicKey,
+      keyId: 'test-key-1',
+      clock: () => now,
+    );
+    final cache = makeStore();
+    await cache.initialize();
+    expect(
+      await cache.accept(
+        await _sign(
+          keyPair: keys,
+          deviceId: await cache.getDeviceId(),
+          issued: _referenceTime,
+        ),
+      ),
+      true,
+    );
+    now = _referenceTime.add(const Duration(hours: 24));
+    await cache.refresh();
+    now = now.subtract(const Duration(minutes: 1));
+    expect(cache.hasValidGrant, true); // Exactly at tolerated clock skew.
+    now = now.subtract(const Duration(seconds: 1));
+    expect(cache.hasValidGrant, false);
+    await cache.refresh();
+    expect(cache.hasValidGrant, false);
+    final reopened = makeStore();
+    await reopened.initialize();
+    expect(reopened.hasValidGrant, false);
+    now = _referenceTime.add(const Duration(hours: 24, seconds: 1));
+    await reopened.refresh();
+    expect(reopened.hasValidGrant, true); // Correct time restores use.
+    now = _referenceTime.add(offlineGrantLifetime);
+    expect(reopened.hasValidGrant, false);
+  });
+
+  test('offline cannot extend TTL; online verification issues new fixed 72h window', () async {
+    var now = _referenceTime;
+    final keys = await _algorithm.newKeyPair();
+    final publicKey = _encode((await keys.extractPublicKey()).bytes);
+    SignedOfflineEntitlementStore makeStore() => SignedOfflineEntitlementStore(
+      publicKeyBase64: publicKey,
+      keyId: 'test-key-1',
+      clock: () => now,
+    );
+    final verifier = _FakeSignerVerifier(keys, () => now);
+    final billing = _FakeBilling();
+    final store = makeStore();
+    final controller = AdFreePurchaseController(
+      gateway: billing,
+      verifier: verifier,
+      offlineStore: store,
+      clock: () => now,
+    );
+    await controller.initialize();
+    await controller.handleUpdates([_receipt()]);
+    expect(store.hasValidGrant, true);
+    final initialVerificationCount = verifier.calls;
+    billing.online = false;
+    now = _referenceTime.add(offlineGrantLifetime);
+    await controller.refreshEntitlement();
+    expect(store.hasValidGrant, false);
+    expect(controller.isLicensed, billingQaMode);
+    expect(verifier.calls, initialVerificationCount);
+    now = _referenceTime.add(const Duration(hours: 73));
+    await controller.refreshEntitlement();
+    expect(store.hasValidGrant, false);
+    expect(controller.isLicensed, billingQaMode);
+    expect(verifier.calls, initialVerificationCount);
+    controller.dispose();
+    await billing.events.close();
+
+    final restoredBilling = _FakeBilling()..online = false;
+    final restoredStore = makeStore();
+    final restoredController = AdFreePurchaseController(
+      gateway: restoredBilling,
+      verifier: verifier,
+      offlineStore: restoredStore,
+      clock: () => now,
+    );
+    await restoredController.initialize();
+    expect(restoredStore.hasValidGrant, false);
+    expect(restoredController.isLicensed, billingQaMode);
+    expect((await restoredStore.getCachedPurchase())?.productId, 'full_access');
+    restoredBilling.online = true;
+    await restoredController.refreshEntitlement();
+    expect(verifier.calls, greaterThan(initialVerificationCount));
+    expect(restoredController.isLicensed, true);
+    expect(restoredStore.hasValidGrant, true);
+    final reissuedAt = now;
+    now = reissuedAt.add(const Duration(hours: 71, minutes: 59, seconds: 59));
+    expect(restoredStore.hasValidGrant, true);
+    now = reissuedAt.add(offlineGrantLifetime);
+    expect(restoredStore.hasValidGrant, false);
+    expect(restoredStore.hasValidGrant, false);
+    expect(restoredController.isLicensed, billingQaMode);
+    restoredController.dispose();
+    await restoredBilling.events.close();
+  });
 }
