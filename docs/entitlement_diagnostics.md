@@ -86,3 +86,36 @@ diagnostic test.
 All diagnostic events must remain secret-free; never add dynamic identifiers
 to this logging helper. Remove the internal-test build or disable the flag
 before public Play promotion.
+
+## Galaxy S9 reproduction and remediation (2026-11-22)
+
+With Play-internal 0.2.7 (versionCode 15) installed, the following was observed:
+
+- Online: `verifyWorkerSignedGrantPresent`, `grantSignatureValid`,
+  `grantClaimsValid`, `grantWriteSucceeded`,
+  `grantReadbackSucceeded`, `receiptReadbackSucceeded`.
+- Following `am force-stop` and relaunch (both offline **and online**):
+  `storageDeviceCreated` and `storedGrantMissing`.
+- No data deletion, uninstall, purchase, or refund was performed.
+  Thus the storage failure is independent of network connectivity.
+
+Likely cause: `CredentialStore` enabled Android
+`encryptedSharedPreferences:true` while `SignedOfflineEntitlementStore`
+used the plugin's default `false`. In flutter_secure_storage 9.2.4,
+the native `checkAndMigrateToEncrypted` routine can move all prefixed keys
+from the legacy preferences file into encrypted preferences. Subsequent
+reads through a default-options store then see the keys as missing.
+
+For 0.2.8 (versionCode 16) both stores use the **same** central
+`yomiPaletteAndroidSecureStorageOptions` with
+`encryptedSharedPreferences:true` and `resetOnError:false`.
+This retains Keystore protection; there is no plaintext fallback.
+Do not clear any existing data while testing the migration.
+
+Verification required on Play-installed 0.2.8 after online restore:
+`storageDeviceReused`, `storedGrantValid`,
+`storedGrantUsable` following an **offline** cold start,
+and the purchase screen must still show permanent access.
+
+This is a source-based diagnosis, not yet a confirmed resolution until
+the S9 Play-installed 0.2.8 test passes.

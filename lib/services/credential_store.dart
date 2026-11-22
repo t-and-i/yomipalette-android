@@ -1,12 +1,15 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'secure_storage_options.dart';
+
 /// API credentials are deliberately kept out of SharedPreferences and files.
 class CredentialStore {
   CredentialStore({FlutterSecureStorage? storage})
-      : _storage = storage ??
-            const FlutterSecureStorage(
-              aOptions: AndroidOptions(encryptedSharedPreferences: true),
-            );
+    : _storage =
+          storage ??
+          const FlutterSecureStorage(
+            aOptions: yomiPaletteAndroidSecureStorageOptions,
+          );
 
   final FlutterSecureStorage _storage;
   final Map<String, String> _sessionOnly = {};
@@ -35,8 +38,9 @@ class CredentialStore {
   }
 
   Future<void> deleteProvider(String provider) async {
-    _sessionOnly
-        .removeWhere((key, _) => key.startsWith('credential.$provider.'));
+    _sessionOnly.removeWhere(
+      (key, _) => key.startsWith('credential.$provider.'),
+    );
     final values = await _storage.readAll();
     for (final key in values.keys.where(
       (key) => key.startsWith('credential.$provider.'),

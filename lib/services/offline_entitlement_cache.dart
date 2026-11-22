@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart' as hashes;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'entitlement_diagnostics.dart';
+import 'secure_storage_options.dart';
 
 const offlineGrantPublicKey = String.fromEnvironment(
   'YOMIPALETTE_OFFLINE_GRANT_PUBLIC_KEY',
@@ -45,7 +46,11 @@ class SignedOfflineEntitlementStore implements OfflineEntitlementStore {
     this._publicKeyBase64 = offlineGrantPublicKey,
     this._keyId = offlineGrantKeyId,
     DateTime Function()? clock,
-  }) : _storage = storage ?? const FlutterSecureStorage(),
+  }) : _storage =
+           storage ??
+           const FlutterSecureStorage(
+             aOptions: yomiPaletteAndroidSecureStorageOptions,
+           ),
        _clock = clock ?? DateTime.now;
 
   static const _deviceKey = 'offline_entitlement_device_v1';
