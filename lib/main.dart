@@ -11,6 +11,8 @@ import 'models/chapter.dart';
 import 'screens/home_screen.dart';
 import 'services/ad_free_purchase.dart';
 import 'services/trial_access.dart';
+import 'services/offline_entitlement_cache.dart';
+import 'services/signed_trial_cache.dart';
 import 'services/preview_audio_player.dart';
 
 // Preserve the existing public HomeScreen symbol for consumers of main.dart.
@@ -47,8 +49,15 @@ class _TtsMobileAppState extends State<TtsMobileApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _adFreeController = AdFreePurchaseController();
-    _trialController = TrialAccessController();
+    // Both controllers share the same installation ID. Paid purchases do not
+    // require a Google account or depend on the trial service.
+    final purchaseCache = SignedOfflineEntitlementStore();
+    _adFreeController = AdFreePurchaseController(offlineStore: purchaseCache);
+    _trialController = TrialAccessController(
+      store: SignedTrialEntitlementStore(
+        deviceIdProvider: purchaseCache.getDeviceId,
+      ),
+    );
     _trialController.addListener(_onPurchaseChanged);
     _adFreeController.addListener(_onPurchaseChanged);
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {

@@ -1,12 +1,12 @@
 # YomiPalette Google Play購入検証バックエンド（未デプロイ）
 
-YomiPaletteの `remove_ads`（非消耗型買い切り商品）用に、**Cloudflare Workers + D1** で動作する購入検証の基礎実装です。現在はローカルテスト済みですが、**本番利用に必要な設定・不正利用対策が未完了のため、公開してはいけません**。
+YomiPaletteの `full_access`（非消耗型買い切り商品）用に、**Cloudflare Workers + D1** で動作する購入検証の基礎実装です。現在はローカルテスト済みですが、**本番利用に必要な設定・不正利用対策が未完了のため、公開してはいけません**。
 
 ## 仕組み
 
 1. Androidアプリが購入イベント・復元イベントを受信し、既存の `BackendPurchaseVerifier` がHTTPSで `POST /verify` を実行します。
 2. WorkerはアプリIDと商品IDを固定し、サービスアカウントのOAuth 2.0アクセス・トークンで **Google Play Developer API `purchases.productsv2.getproductpurchasev2`** を呼び出します。
-3. `purchaseStateContext.purchaseState` が `PURCHASED` かつ `productLineItem` に `remove_ads` があり、消費・全額返金済みでなければ候補とします。
+3. `purchaseStateContext.purchaseState` が `PURCHASED` かつ `productLineItem` に `full_access` があり、消費・全額返金済みでなければ候補とします。
 4. D1に記録した返金・取り消し済みトークンのSHA-256ハッシュと照合します。**返金情報の同期が12時間以内に成功していなければ、購入者にも `unavailable` を返します**。
 5. WorkerのCron Triggerが6時間ごとに **Voided Purchases API** を照会し、過去の同期と2日間重複する期間を取り込んでD1に失効情報を追加します。初回は29日前から収集します。
 6. 戻り値はアプリ側の既存API契約 `{"status":"verified"|"rejected"|"unavailable"}` に対応します（`unavailable` はHTTP 503）。
@@ -21,7 +21,7 @@ Content-Type: application/json
 
 {
   "packageName": "com.tjsongwei.tts_text_mp3_mobile",
-  "productId": "remove_ads",
+  "productId": "full_access",
   "purchaseToken": "<Google Play purchase token>",
   "requestId": "<32 lowercase hex characters>",
   "integrityToken": "<Play Integrity Standard token>"

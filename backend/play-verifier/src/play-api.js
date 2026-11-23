@@ -1,7 +1,6 @@
 export const PACKAGE_NAME = 'com.tjsongwei.tts_text_mp3_mobile';
 export const PRODUCT_ID = 'full_access';
-export const LEGACY_PRODUCT_ID = 'remove_ads';
-export const SUPPORTED_PRODUCT_IDS = new Set([PRODUCT_ID, LEGACY_PRODUCT_ID]);
+export const SUPPORTED_PRODUCT_IDS = new Set([PRODUCT_ID]);
 const API_BASE = 'https://androidpublisher.googleapis.com/androidpublisher/v3/applications';
 
 export function classifyPurchase(purchase, expectedProductId = PRODUCT_ID) {

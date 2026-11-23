@@ -42,12 +42,25 @@ class AccessPurchaseSection extends StatelessWidget {
               Text(strings.get('trialChecking'))
             else if (expired)
               Text(strings.get('trialExpired'))
-            else if (trial != null)
+            else if (trial?.isActive == true)
               Text(
                 strings
                     .get('trialRemaining')
                     .replaceFirst('{days}', trial!.daysRemaining.toString()),
               ),
+
+            if (trial != null && trial!.initialized && !trial!.isActive) ...[
+              const SizedBox(height: 8),
+              Text(strings.get('trialSignInRequired')),
+              const SizedBox(height: 6),
+              OutlinedButton.icon(
+                onPressed: trial!.canSignIn ? trial!.signIn : null,
+                icon: const Icon(Icons.account_circle_outlined),
+                label: Text(strings.get('trialSignIn')),
+              ),
+            ],
+            if (trial?.busy == true) const LinearProgressIndicator(),
+            if (trial?.message != null) Text(strings.get(trial!.message!)),
             if (!compact) ...[
               const SizedBox(height: 6),
               Text(

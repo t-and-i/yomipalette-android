@@ -8,9 +8,8 @@ import 'purchase_verifier.dart';
 import 'offline_entitlement_cache.dart';
 import 'entitlement_diagnostics.dart';
 
-/// New permanent license; retain existing remove_ads purchases as grandfathered.
+/// The only permanent license SKU is Google Play's non-consumable full_access.
 const fullAccessProductId = 'full_access';
-const legacyAdFreeProductId = 'remove_ads';
 const adFreeProductId = fullAccessProductId;
 
 abstract class AdFreeBillingGateway {
@@ -164,10 +163,7 @@ class AdFreePurchaseController extends ChangeNotifier {
         _notify();
         return;
       }
-      final result = await _gateway.queryProducts({
-        fullAccessProductId,
-        legacyAdFreeProductId,
-      });
+      final result = await _gateway.queryProducts({fullAccessProductId});
       _product = result.productDetails
           .where((item) => item.id == fullAccessProductId)
           .firstOrNull;
@@ -385,9 +381,7 @@ class AdFreePurchaseController extends ChangeNotifier {
 
   Future<void> _applyUpdates(List<PurchaseDetails> purchases) async {
     for (final purchase in purchases) {
-      if (_disposed ||
-          (purchase.productID != fullAccessProductId &&
-              purchase.productID != legacyAdFreeProductId)) {
+      if (_disposed || purchase.productID != fullAccessProductId) {
         continue;
       }
       switch (purchase.status) {

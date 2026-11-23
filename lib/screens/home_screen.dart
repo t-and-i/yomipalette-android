@@ -370,8 +370,17 @@ class _HomeScreenState extends State<HomeScreen> {
     await widget.trialController!.refresh();
     if (_canUse) return true;
     if (mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(s.get('trialExpired'))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            s.get(
+              widget.trialController!.isExpired
+                  ? 'trialExpired'
+                  : 'trialSignInRequired',
+            ),
+          ),
+        ),
+      );
     }
     return false;
   }

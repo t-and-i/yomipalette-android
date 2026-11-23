@@ -7,7 +7,8 @@ param(
     [string]$PurchaseVerifierUrl = $env:YOMIPALETTE_BILLING_VERIFY_URL,
     [string]$IntegrityProjectNumber = $env:YOMIPALETTE_PLAY_INTEGRITY_PROJECT_NUMBER,
     [string]$OfflineGrantPublicKey = $env:YOMIPALETTE_OFFLINE_GRANT_PUBLIC_KEY,
-    [string]$OfflineGrantKeyId = $env:YOMIPALETTE_OFFLINE_GRANT_KEY_ID
+    [string]$OfflineGrantKeyId = $env:YOMIPALETTE_OFFLINE_GRANT_KEY_ID,
+    [string]$GoogleWebClientId = $env:YOMIPALETTE_GOOGLE_WEB_CLIENT_ID
 )
 $ErrorActionPreference = 'Stop'
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -51,6 +52,11 @@ try {
         }
         $flutterArgs += "--dart-define=YOMIPALETTE_OFFLINE_GRANT_PUBLIC_KEY=$OfflineGrantPublicKey"
         $flutterArgs += "--dart-define=YOMIPALETTE_OFFLINE_GRANT_KEY_ID=$OfflineGrantKeyId"
+        # Production trial requires a configured Google OAuth Web client ID.
+        if ($GoogleWebClientId -notmatch '^[0-9]+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$') {
+            throw 'Production AAB blocked: configure YOMIPALETTE_GOOGLE_WEB_CLIENT_ID with the Google OAuth Web client ID.'
+        }
+        $flutterArgs += "--dart-define=YOMIPALETTE_GOOGLE_WEB_CLIENT_ID=$GoogleWebClientId"
     }
     if ($EntitlementDiagnostics) {
         $flutterArgs += '--dart-define=YOMIPALETTE_ENTITLEMENT_DIAGNOSTICS=true'

@@ -395,27 +395,24 @@ void main() {
     await offlineBilling.events.close();
   });
 
-  test(
-    'old remove_ads grants work without a separate license mechanism',
-    () async {
-      final keys = await _algorithm.newKeyPair();
-      final key = _encode((await keys.extractPublicKey()).bytes);
-      final cache = SignedOfflineEntitlementStore(
-        publicKeyBase64: key,
-        keyId: 'test-key-1',
-        clock: () => _referenceTime,
-      );
-      await cache.initialize();
-      final grant = await _sign(
-        keyPair: keys,
-        deviceId: await cache.getDeviceId(),
-        issued: _referenceTime,
-        productId: 'remove_ads',
-      );
-      expect(await cache.accept(grant), true);
-      expect(cache.hasValidGrant, true);
-    },
-  );
+  test('retired remove_ads signed grants are never accepted', () async {
+    final keys = await _algorithm.newKeyPair();
+    final key = _encode((await keys.extractPublicKey()).bytes);
+    final cache = SignedOfflineEntitlementStore(
+      publicKeyBase64: key,
+      keyId: 'test-key-1',
+      clock: () => _referenceTime,
+    );
+    await cache.initialize();
+    final grant = await _sign(
+      keyPair: keys,
+      deviceId: await cache.getDeviceId(),
+      issued: _referenceTime,
+      productId: 'remove_ads',
+    );
+    expect(await cache.accept(grant), false);
+    expect(cache.hasValidGrant, false);
+  });
 
   test(
     'cached recheck and Play revocation share one verification queue',

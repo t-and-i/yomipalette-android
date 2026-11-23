@@ -19,6 +19,12 @@ export async function verifyPlayIntegrity(payload, purchaseTokenHash, accessToke
         'yomipalette:/verify:v2', payload.packageName,
         payload.productId, purchaseTokenHash, payload.requestId, payload.deviceId,
       ]));
+  return verifyIntegrityHash(payload, expectedHash, accessToken, { fetchImpl, now });
+}
+
+export async function verifyIntegrityHash(payload, expectedHash, accessToken, {
+  fetchImpl, now,
+}) {
   const response = await fetchImpl(
     'https://playintegrity.googleapis.com/v1/' + PACKAGE_NAME + ':decodeIntegrityToken',
     {

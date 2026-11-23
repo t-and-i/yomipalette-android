@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { handleRequest, runScheduledSync } from '../src/worker.js';
-import { PACKAGE_NAME, PRODUCT_ID, LEGACY_PRODUCT_ID, classifyPurchase } from '../src/play-api.js';
+import { PACKAGE_NAME, PRODUCT_ID, classifyPurchase } from '../src/play-api.js';
 import { tokenHash } from '../src/revocations.js';
 
 const NOW = Date.parse('2026-11-04T00:00:00.000Z');
@@ -339,25 +339,11 @@ test('partial cron failure leaves sync timestamp unchanged', async () => {
   assert.equal(db.revoked.size, 1);
 });
 
-test('legacy purchases remain valid only for the matching product ID', () => {
-  assert.equal(classifyPurchase(purchase({ id: LEGACY_PRODUCT_ID }), LEGACY_PRODUCT_ID), 'verified');
-  assert.equal(classifyPurchase(purchase({ id: LEGACY_PRODUCT_ID }), PRODUCT_ID), 'rejected');
-  assert.equal(classifyPurchase(purchase({ id: PRODUCT_ID }), LEGACY_PRODUCT_ID), 'rejected');
-});
-
-test('legacy purchase is restored and cannot impersonate the new product', async () => {
-  const ctx = setup({
-    productId: LEGACY_PRODUCT_ID,
-    googleBody: purchase({ id: LEGACY_PRODUCT_ID }),
-  });
-  const restored = await handleRequest(request({ productId: LEGACY_PRODUCT_ID }), ctx.env, ctx.dependencies);
-  assert.equal(restored.status, 200);
-  assert.deepEqual(await restored.json(), { status: 'verified' });
-
-  const mismatched = setup({
-    productId: LEGACY_PRODUCT_ID,
-    googleBody: purchase({ id: PRODUCT_ID }),
-  });
-  const rejected = await handleRequest(request({ productId: LEGACY_PRODUCT_ID }), mismatched.env, mismatched.dependencies);
-  assert.deepEqual(await rejected.json(), { status: 'rejected' });
+test('retired remove_ads SKU never verifies or issues offline access', async () => {
+  assert.equal(classifyPurchase(purchase({ id: 'remove_ads' }), PRODUCT_ID), 'rejected');
+  const ctx = setup({ googleBody: purchase({ id: 'remove_ads' }) });
+  const response = await handleRequest(request({ productId: 'remove_ads' }),
+    ctx.env, ctx.dependencies);
+  assert.equal(response.status, 400);
+  assert.equal(ctx.calls, 0);
 });
