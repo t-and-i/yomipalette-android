@@ -12,12 +12,11 @@ class TrialAccessController extends ChangeNotifier {
     TrialIdentityProvider? identity,
     TrialVerifier? verifier,
     DateTime Function()? clock,
-    bool allowQaTrial = billingQaMode,
+    this._allowQaTrial = billingQaMode,
   }) : _store = store ?? SignedTrialEntitlementStore(),
        _identity = identity ?? GoogleTrialIdentityProvider(),
        _verifier = verifier ?? createTrialVerifier(),
        _ownsVerifier = verifier == null,
-       _allowQaTrial = allowQaTrial,
        _clock = clock ?? DateTime.now;
 
   static const duration = Duration(days: 30);
