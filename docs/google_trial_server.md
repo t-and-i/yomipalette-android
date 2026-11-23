@@ -93,3 +93,26 @@ set `allowQaTrial:false`, and Play builds omit the QA flag.
   record may allow a new trial; policy must address deletion versus abuse.
 - Do not mix the 72-hour **purchase** expiry E2E experiment with trial tests.
   S9 stays offline until its existing scheduled test finishes.
+
+## Signed internal Play staging-trial bundle (build 18)
+
+2026-11-23: S22 SCG14 is USB-connected to Lenovo. The Play-installed
+YomiPalette 0.2.9+17 displays permanent purchase entitlement.
+Do NOT uninstall, clear data, or replace it with a debug-signed APK.
+
+Build 0.2.10+18 uses independent verifier routes and public keys:
+- Paid full_access: production /verify + production purchase public key.
+- 30-day trial: staging /trial + staging trial public key.
+- OAuth uses YOMIPALETTE_GOOGLE_WEB_CLIENT_ID.
+- Play Billing QA and entitlement diagnostics remain OFF.
+
+Only upload the signed build 18 to Google Play internal testing AFTER the
+S9 real-time 72h offline expiry test scheduled for 2026-11-26 completes.
+Otherwise Play automatic updates could change S9's app version when it
+reconnects, invalidating expiry E2E evidence.
+
+After S9 test: update S22 from Google Play, verify permanent purchase
+does not require Google login. S22 is already purchased, so a separate
+unlicensed Play tester/device is necessary to verify actual trial start.
+Never promote this staging-trial AAB to a public Play release; rebuild
+using production trial verification after successful E2E tests.

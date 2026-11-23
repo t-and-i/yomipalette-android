@@ -6,6 +6,17 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'offline_entitlement_cache.dart';
 import 'secure_storage_options.dart';
 
+// These are public verifier parameters, not signing secrets.  They can be
+// different from the paid-purchase key in an isolated staging-trial build.
+const trialGrantPublicKey = String.fromEnvironment(
+  'YOMIPALETTE_TRIAL_GRANT_PUBLIC_KEY',
+  defaultValue: offlineGrantPublicKey,
+);
+const trialGrantKeyId = String.fromEnvironment(
+  'YOMIPALETTE_TRIAL_GRANT_KEY_ID',
+  defaultValue: offlineGrantKeyId,
+);
+
 /// The trial grant uses the same public key as permanent purchase grants but
 /// a different signed schema (v2/kind=trial). Neither grants the other kind.
 abstract interface class TrialEntitlementStore {
@@ -24,8 +35,8 @@ class SignedTrialEntitlementStore implements TrialEntitlementStore {
   SignedTrialEntitlementStore({
     FlutterSecureStorage? storage,
     Future<String> Function()? deviceIdProvider,
-    this._publicKeyBase64 = offlineGrantPublicKey,
-    this._keyId = offlineGrantKeyId,
+    this._publicKeyBase64 = trialGrantPublicKey,
+    this._keyId = trialGrantKeyId,
     DateTime Function()? clock,
   }) : _storage =
            storage ??

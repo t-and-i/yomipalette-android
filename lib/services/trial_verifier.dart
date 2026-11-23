@@ -13,6 +13,12 @@ const googleTrialWebClientId = String.fromEnvironment(
   'YOMIPALETTE_GOOGLE_WEB_CLIENT_ID',
 );
 
+// Optional isolated trial endpoint for internal Play testing.  Purchased
+// full_access receipts continue to use the separate production verifier.
+const trialVerificationUrl = String.fromEnvironment(
+  'YOMIPALETTE_TRIAL_VERIFY_URL',
+);
+
 abstract interface class TrialIdentityProvider {
   Future<String?> signIn();
   Future<String?> signInSilently();
@@ -194,17 +200,22 @@ class BackendTrialVerifier implements TrialVerifier {
 }
 
 TrialVerifier createTrialVerifier() {
+  final configured = trialVerificationUrl.isEmpty
+      ? billingVerificationUrl
+      : trialVerificationUrl;
   if (googleTrialWebClientId.isEmpty ||
-      billingVerificationUrl.isEmpty ||
+      configured.isEmpty ||
       (int.tryParse(playIntegrityProjectNumber) ?? 0) <= 0) {
     return const UnconfiguredTrialVerifier();
   }
-  final verifyUrl = Uri.tryParse(billingVerificationUrl);
-  if (verifyUrl == null ||
-      verifyUrl.scheme != 'https' ||
-      verifyUrl.host.isEmpty ||
-      verifyUrl.path != '/verify') {
+  final url = Uri.tryParse(configured);
+  if (url == null ||
+      url.scheme != 'https' ||
+      url.host.isEmpty ||
+      url.hasQuery ||
+      url.hasFragment ||
+      (url.path != '/verify' && url.path != '/trial')) {
     return const UnconfiguredTrialVerifier();
   }
-  return BackendTrialVerifier(endpoint: verifyUrl.replace(path: '/trial'));
+  return BackendTrialVerifier(endpoint: url.replace(path: '/trial'));
 }
