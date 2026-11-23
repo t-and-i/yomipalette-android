@@ -69,6 +69,7 @@ export async function handleTrial(payload, env, {
 } = {}) {
   if (!validTrialPayload(payload)) return json(400, { status: 'invalid_request' });
   if (!env.GOOGLE_SIGN_IN_WEB_CLIENT_ID || !env.TRIAL_SUBJECT_HMAC_KEY ||
+      !env.OFFLINE_GRANT_KEY_ID || !env.OFFLINE_GRANT_PRIVATE_KEY_PKCS8 ||
       !env.ENTITLEMENTS_DB) return json(503, { status: 'unavailable' });
   try {
     const sub = await verifyIdentity(payload.googleIdToken,

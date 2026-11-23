@@ -203,3 +203,12 @@ test('D1 starting timestamp is atomic and blocked users cannot restart', async (
   const status = await (await ctx.perform()).json();
   assert.deepEqual(status, { status: 'blocked' });
 });
+
+
+test('missing signing key blocks trial before inserting first-use record', async () => {
+  const ctx = await scenario();
+  delete ctx.env.OFFLINE_GRANT_PRIVATE_KEY_PKCS8;
+  const response = await ctx.perform();
+  assert.equal(response.status, 503);
+  assert.equal(ctx.env.ENTITLEMENTS_DB.records.size, 0);
+});
