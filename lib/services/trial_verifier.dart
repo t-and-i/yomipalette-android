@@ -7,6 +7,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 
 import 'purchase_verifier.dart';
+import 'entitlement_diagnostics.dart';
 
 /// Only the OIDC ID token is sent to our Worker. No Google API scopes are asked.
 const googleTrialWebClientId = String.fromEnvironment(
@@ -44,8 +45,13 @@ class GoogleTrialIdentityProvider implements TrialIdentityProvider {
     if (!_google.supportsAuthenticate()) {
       throw StateError('Google account selection is unavailable.');
     }
-    final account = await _google.authenticate();
-    return account.authentication.idToken;
+    try {
+      final account = await _google.authenticate();
+      return account.authentication.idToken;
+    } catch (_) {
+      entitlementTrace(EntitlementEvent.trialIdentityFailed);
+      rethrow;
+    }
   }
 
   @override
@@ -134,8 +140,10 @@ class BackendTrialVerifier implements TrialVerifier {
     if (!RegExp(r'^[A-Za-z0-9_-]{43}$').hasMatch(deviceId) ||
         idToken.length < 80 ||
         idToken.length > 8192) {
+      entitlementTrace(EntitlementEvent.trialInputInvalid);
       return unavailable;
     }
+    var workerStarted = false;
     try {
       final random = Random.secure();
       final requestId = List.generate(
@@ -155,9 +163,16 @@ class BackendTrialVerifier implements TrialVerifier {
             ),
           )
           .toString();
+      entitlementTrace(EntitlementEvent.trialIntegrityStarted);
       final integrityToken = await _integrityToken(hash)
           .timeout(const Duration(seconds: 60));
-      if (integrityToken == null || integrityToken.isEmpty) return unavailable;
+      if (integrityToken == null || integrityToken.isEmpty) {
+        entitlementTrace(EntitlementEvent.trialIntegrityFailed);
+        return unavailable;
+      }
+      entitlementTrace(EntitlementEvent.trialIntegrityReady);
+      workerStarted = true;
+      entitlementTrace(EntitlementEvent.trialWorkerRequest);
       final response = await _client
           .post(
             endpoint,
@@ -171,9 +186,22 @@ class BackendTrialVerifier implements TrialVerifier {
             }),
           )
           .timeout(const Duration(seconds: 40));
-      if (response.statusCode != 200) return unavailable;
+      if (response.statusCode != 200) {
+        entitlementTrace(EntitlementEvent.trialWorkerHttpFailed);
+        return unavailable;
+      }
       final decoded = jsonDecode(response.body);
-      if (decoded is! Map<String, dynamic>) return unavailable;
+      if (decoded is! Map<String, dynamic>) {
+        entitlementTrace(EntitlementEvent.trialWorkerResponseInvalid);
+        return unavailable;
+      }
+      entitlementTrace(switch (decoded['status']) {
+        'active' when decoded['offlineGrant'] is String =>
+          EntitlementEvent.trialWorkerActive,
+        'expired' => EntitlementEvent.trialWorkerExpired,
+        'blocked' => EntitlementEvent.trialWorkerBlocked,
+        _ => EntitlementEvent.trialWorkerUnavailable,
+      });
       return switch (decoded['status']) {
         'active' when decoded['offlineGrant'] is String =>
           TrialVerificationOutcome(
@@ -189,6 +217,11 @@ class BackendTrialVerifier implements TrialVerifier {
         _ => unavailable,
       };
     } catch (_) {
+      entitlementTrace(
+        workerStarted
+            ? EntitlementEvent.trialWorkerFailed
+            : EntitlementEvent.trialIntegrityFailed,
+      );
       return unavailable; // Never log tokens, request bodies or exceptions.
     }
   }

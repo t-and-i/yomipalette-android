@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'signed_trial_cache.dart';
+import 'entitlement_diagnostics.dart';
 import 'purchase_verifier.dart' show billingQaMode;
 import 'trial_verifier.dart';
 
@@ -126,23 +127,30 @@ class TrialAccessController extends ChangeNotifier {
     if (!silent) _message = null;
     _notify();
     try {
+      entitlementTrace(EntitlementEvent.trialIdentityStarted);
       final idToken = silent
           ? await _identity.signInSilently()
           : await _identity.signIn();
       if (idToken == null || idToken.isEmpty) {
+        entitlementTrace(EntitlementEvent.trialIdTokenMissing);
         if (!silent) _message = 'trialSignInError';
         return;
       }
+      entitlementTrace(EntitlementEvent.trialIdTokenReady);
+      final deviceId = await _store.getDeviceId();
+      entitlementTrace(EntitlementEvent.trialDeviceReady);
       final result = await _verifier.verify(
         idToken: idToken,
-        deviceId: await _store.getDeviceId(),
+        deviceId: deviceId,
       );
       switch (result.status) {
         case TrialVerificationStatus.active:
           if (result.grant == null || !await _store.accept(result.grant!)) {
+            entitlementTrace(EntitlementEvent.trialGrantRejected);
             _message = 'trialUnavailable';
             break;
           }
+          entitlementTrace(EntitlementEvent.trialGrantAccepted);
           _blocked = false;
           _expiredFromServer = false;
           _message = null;
@@ -162,6 +170,7 @@ class TrialAccessController extends ChangeNotifier {
           break;
       }
     } catch (_) {
+      entitlementTrace(EntitlementEvent.trialControllerFailed);
       if (!silent) _message = 'trialSignInError';
     } finally {
       _busy = false;
