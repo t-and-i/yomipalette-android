@@ -36,6 +36,9 @@ dependencies:
   google_sign_in: 7.2.0
 
 dependency_overrides:
+  # Local completion-check patch for interrupted Edge synthesis (RA-05).
+  flutter_edge_tts:
+    path: third_party/flutter_edge_tts
   # Keep the KGP-compatible Android implementation until the other plugins migrate.
   shared_preferences_android: 2.4.23
 

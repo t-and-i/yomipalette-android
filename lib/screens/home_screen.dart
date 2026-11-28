@@ -20,6 +20,7 @@ import '../services/audio_generator.dart';
 import '../services/audio_generation_cancellation.dart';
 import '../services/ad_free_purchase.dart';
 import '../services/trial_access.dart';
+import '../services/review_access.dart';
 import '../services/document_reader.dart';
 import '../services/output_directory_service.dart';
 import '../services/pdf_reader.dart';
@@ -38,6 +39,7 @@ class HomeScreen extends StatefulWidget {
     this.onThemeModeChanged,
     this.adFreeController,
     this.trialController,
+    this.reviewController,
     this.previewPlayer,
     this.externalLinkLauncher,
     this.initialChapters = const [],
@@ -48,6 +50,7 @@ class HomeScreen extends StatefulWidget {
   final ValueChanged<ThemeMode>? onThemeModeChanged;
   final AdFreePurchaseController? adFreeController;
   final TrialAccessController? trialController;
+  final ReviewAccessController? reviewController;
   final PreviewAudioPlayer? previewPlayer;
   final ExternalLinkLauncher? externalLinkLauncher;
   final List<Chapter> initialChapters;
@@ -361,11 +364,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   bool get _canUse =>
+      widget.reviewController?.isActive == true ||
       widget.trialController == null ||
       widget.adFreeController?.isLicensed == true ||
       widget.trialController!.isActive;
 
   Future<bool> _ensureAccess() async {
+    if (widget.adFreeController?.isLicensed == true) return true;
+    if (widget.reviewController?.isActive == true) return true;
+    if (widget.reviewController?.hasCredential == true) {
+      await widget.reviewController!.refresh();
+      if (widget.reviewController!.isActive) return true;
+    }
     if (widget.trialController == null) return true;
     await widget.trialController!.refresh();
     if (_canUse) return true;
@@ -645,6 +655,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
                 builder: (_) => AppInformationScreen(
+                  reviewController: widget.reviewController,
                   version: _appVersion,
                   buildNumber: _appBuildNumber,
                   openProject: () => _openExternalLink(projectContactUrl),
@@ -926,6 +937,7 @@ class _HomeScreenState extends State<HomeScreen> {
             AccessPurchaseSection(
               purchase: widget.adFreeController!,
               trial: widget.trialController,
+              review: widget.reviewController,
               strings: s,
             ),
           const Divider(height: 32),
@@ -1011,6 +1023,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: AccessPurchaseSection(
                 purchase: widget.adFreeController!,
                 trial: widget.trialController,
+                review: widget.reviewController,
                 strings: s,
                 compact: true,
               ),

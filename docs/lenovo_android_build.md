@@ -36,7 +36,7 @@ In a new PowerShell session:
 
 ```powershell
 cd C:\CodexWorkspace\yomipalette-android
-$env:YOMIPALETTE_BILLING_VERIFY_URL = 'https://yp-verify.tiaozheng.dpdns.org/verify'
+$env:YOMIPALETTE_BILLING_VERIFY_URL = 'https://yp-verify.t-and-i.date/verify'
 $env:YOMIPALETTE_PLAY_INTEGRITY_PROJECT_NUMBER = '22173932202'
 $env:YOMIPALETTE_OFFLINE_GRANT_KEY_ID = 'ym-2026q4-prod'
 $env:YOMIPALETTE_OFFLINE_GRANT_PUBLIC_KEY = (Get-Content -Raw "$env:USERPROFILE\.android\yomipalette-signing\offline-grant-public.base64url").Trim()

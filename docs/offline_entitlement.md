@@ -76,7 +76,7 @@ the key ID / public key refer to the same signing key:
 ```bash
 export YOMIPALETTE_OFFLINE_GRANT_KEY_ID=ym-2026q4-prod
 export YOMIPALETTE_OFFLINE_GRANT_PUBLIC_KEY="$(cat "$HOME/.config/yomipalette-offline-keys/production/public.base64url")"
-export YOMIPALETTE_BILLING_VERIFY_URL=https://yp-verify.tiaozheng.dpdns.org/verify
+export YOMIPALETTE_BILLING_VERIFY_URL=https://yp-verify.t-and-i.date/verify
 export YOMIPALETTE_PLAY_INTEGRITY_PROJECT_NUMBER=<project number>
 bash scripts/build-play-linux.sh
 ```

@@ -201,10 +201,9 @@ packages:
   flutter_edge_tts:
     dependency: "direct main"
     description:
-      name: flutter_edge_tts
-      sha256: "542dbeebfe46009cd02d41d58435e4a22ff00e3e8b1ef8ee111b0177a49f57ed"
-      url: "https://pub.dev"
-    source: hosted
+      path: "third_party/flutter_edge_tts"
+      relative: true
+    source: path
     version: "0.0.3"
   flutter_lame:
     dependency: "direct main"
