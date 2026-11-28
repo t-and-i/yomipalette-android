@@ -2,6 +2,7 @@ import { getPlayAccessToken } from './oauth.js';
 import { verifyPlayIntegrity, INTEGRITY_SCOPE } from './play-integrity.js';
 import { handleRtdn } from './rtdn.js';
 import { handleTrial } from './trial.js';
+import { handleReview } from './review.js';
 import { allowVerifyIp, allowVerifyToken } from './rate-limits.js';
 import { issueOfflineGrant, validDeviceId } from './offline-grants.js';
 import {
@@ -103,6 +104,15 @@ export async function handleRequest(request, env, {
   getAccessToken = getPlayAccessToken,
 } = {}) {
   const url = new URL(request.url);
+  if (url.pathname === '/review') {
+    if (request.method !== 'POST') return json(405, { error: 'method_not_allowed' });
+    try {
+      if (!await allowVerifyIp(env, request)) return rateLimited();
+      return await handleReview(await readBoundedJson(request), env, { now });
+    } catch {
+      return json(503, { status: 'unavailable' });
+    }
+  }
   if (url.pathname === '/rtdn') {
     return handleRtdn(request, env, { now, fetchImpl, getAccessToken });
   }

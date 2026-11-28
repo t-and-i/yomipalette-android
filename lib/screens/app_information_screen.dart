@@ -2,18 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../l10n/strings.dart';
+import '../services/review_access.dart';
+import 'review_access_screen.dart';
 
 class AppInformationScreen extends StatelessWidget {
   const AppInformationScreen({
     required this.version,
     required this.buildNumber,
     required this.openProject,
+    this.reviewController,
     super.key,
   });
 
   final String? version;
   final String? buildNumber;
   final VoidCallback openProject;
+  final ReviewAccessController? reviewController;
 
   @override
   Widget build(BuildContext context) {
@@ -60,6 +64,17 @@ class AppInformationScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
+          if (reviewController != null)
+            ListTile(
+              leading: const Icon(Icons.verified_user_outlined),
+              title: Text(s.get('reviewEntry')),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) =>
+                      ReviewAccessScreen(controller: reviewController!),
+                ),
+              ),
+            ),
           ListTile(
             leading: const Icon(Icons.privacy_tip_outlined),
             title: Text(s.get('privacy')),

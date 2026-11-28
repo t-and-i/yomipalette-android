@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../l10n/strings.dart';
 import '../services/ad_free_purchase.dart';
 import '../services/trial_access.dart';
+import '../services/review_access.dart';
 
 /// Status and purchase action; entitlement policy lives in controllers.
 class AccessPurchaseSection extends StatelessWidget {
@@ -10,17 +11,25 @@ class AccessPurchaseSection extends StatelessWidget {
     required this.purchase,
     required this.strings,
     this.trial,
+    this.review,
     this.compact = false,
     super.key,
   });
 
   final AdFreePurchaseController purchase;
   final TrialAccessController? trial;
+  final ReviewAccessController? review;
   final AppStrings strings;
   final bool compact;
 
   @override
   Widget build(BuildContext context) {
+    if (review?.isActive == true) {
+      return Padding(
+        padding: const EdgeInsets.all(12),
+        child: Text(strings.get('reviewActive')),
+      );
+    }
     final licensed = purchase.isLicensed;
     final expired = trial?.isExpired ?? false;
     return Padding(
@@ -35,6 +44,8 @@ class AccessPurchaseSection extends StatelessWidget {
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 6),
+          if (review?.hasCredential == true)
+            Text(strings.get('reviewReconnect')),
           if (licensed)
             Text(strings.get('accessLicensed'))
           else ...[

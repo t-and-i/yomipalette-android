@@ -8,6 +8,19 @@ class AppStrings {
 
   static const _values = <String, Map<String, String>>{
     'en': {
+      "reviewEntry": "Google Play review",
+      "reviewActive": "Review access",
+      "reviewInstructions": "Enter the reusable review token provided in Play Console. Access renews online and works offline for up to 72 hours. Ending review access returns to the normal access screen.",
+      "reviewToken": "Review token",
+      "reviewActivate": "Activate review access",
+      "reviewRefresh": "Refresh review access",
+      "reviewEnd": "End review access",
+      "reviewReconnect": "Connect to update review access.",
+      "reviewRejected":
+          "The review token or registration is invalid or revoked.",
+      "reviewUnavailable":
+          "Review access is unavailable. Check your connection and try again.",
+
       "about": "About this app",
       "versionUnavailable": "Version unavailable",
       "version": "Version",
@@ -146,6 +159,17 @@ class AppStrings {
       'hide': 'Hide',
     },
     'ja': {
+      "reviewEntry": "Google Play 審査用",
+      "reviewActive": "審査用アクセス",
+      "reviewInstructions": "Play Console に登録された審査用トークンを入力してください。オンラインで自動更新され、オフラインでは最大72時間利用できます。終了すると通常の利用画面に戻ります。",
+      "reviewToken": "審査用トークン",
+      "reviewActivate": "審査用アクセスを有効にする",
+      "reviewRefresh": "審査用アクセスを更新",
+      "reviewEnd": "審査用アクセスを終了",
+      "reviewReconnect": "接続して審査用アクセスを更新してください。",
+      "reviewRejected": "審査用トークンまたは登録が無効・失効しています。",
+      "reviewUnavailable": "審査用アクセスを確認できません。接続を確認して再試行してください。",
+
       "about": "このアプリについて",
       "versionUnavailable": "バージョンを取得できません",
       "version": "バージョン",
@@ -281,6 +305,18 @@ class AppStrings {
       'hide': '非表示',
     },
     'zh': {
+      "reviewEntry": "Google Play 审核专用",
+      "reviewActive": "审核访问权限",
+      "reviewInstructions":
+          "请输入在 Play Console 中登记的审核令牌。权限会在线自动续期，离线最长可用72小时。结束审核访问后返回常规访问界面。",
+      "reviewToken": "审核令牌",
+      "reviewActivate": "启用审核访问",
+      "reviewRefresh": "更新审核访问",
+      "reviewEnd": "结束审核访问",
+      "reviewReconnect": "请连接网络以更新审核访问权限。",
+      "reviewRejected": "审核令牌或注册信息无效或已撤销。",
+      "reviewUnavailable": "无法验证审核访问权限。请检查网络连接后重试。",
+
       "about": "关于本应用",
       "versionUnavailable": "无法获取版本",
       "version": "版本",

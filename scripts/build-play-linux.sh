@@ -24,6 +24,15 @@ marker="$(mktemp)"
 trap 'rm -f "$marker"' EXIT
 args=(build appbundle --release "--dart-define=YOMIPALETTE_BILLING_VERIFY_URL=$url" "--dart-define=YOMIPALETTE_PLAY_INTEGRITY_PROJECT_NUMBER=$project" "--dart-define=YOMIPALETTE_OFFLINE_GRANT_PUBLIC_KEY=$offline_key" "--dart-define=YOMIPALETTE_OFFLINE_GRANT_KEY_ID=$offline_key_id" "--dart-define=YOMIPALETTE_GOOGLE_WEB_CLIENT_ID=$google_web_client_id")
 # Opt-in, fixed-code diagnostic logging for INTERNAL TEST builds only.
+review_url="${YOMIPALETTE_REVIEW_ACCESS_URL:-}"
+if [[ -n "$review_url" ]]; then
+  [[ "$review_url" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?/review$ ]] || { echo 'Invalid HTTPS review endpoint.' >&2; exit 1; }
+  args+=("--dart-define=YOMIPALETTE_REVIEW_ACCESS_URL=$review_url")
+  review_key="${YOMIPALETTE_REVIEW_GRANT_PUBLIC_KEY:-$offline_key}"
+  review_key_id="${YOMIPALETTE_REVIEW_GRANT_KEY_ID:-$offline_key_id}"
+  [[ "$review_key" =~ ^[A-Za-z0-9_-]{43}$ && "$review_key_id" =~ ^[A-Za-z0-9_-]{1,32}$ ]] || { echo 'Invalid review verifier public key or key ID.' >&2; exit 1; }
+  args+=("--dart-define=YOMIPALETTE_REVIEW_GRANT_PUBLIC_KEY=$review_key" "--dart-define=YOMIPALETTE_REVIEW_GRANT_KEY_ID=$review_key_id")
+fi
 if [[ "${YOMIPALETTE_ENTITLEMENT_DIAGNOSTICS:-0}" == 1 ]]; then
   args+=("--dart-define=YOMIPALETTE_ENTITLEMENT_DIAGNOSTICS=true")
 elif [[ "${YOMIPALETTE_ENTITLEMENT_DIAGNOSTICS:-0}" != 0 ]]; then

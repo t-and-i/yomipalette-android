@@ -11,6 +11,8 @@ import 'models/chapter.dart';
 import 'screens/home_screen.dart';
 import 'services/ad_free_purchase.dart';
 import 'services/trial_access.dart';
+import 'services/review_access.dart';
+import 'services/signed_review_cache.dart';
 import 'services/offline_entitlement_cache.dart';
 import 'services/signed_trial_cache.dart';
 import 'services/preview_audio_player.dart';
@@ -44,12 +46,13 @@ class _TtsMobileAppState extends State<TtsMobileApp>
   bool _themeChangedDuringRestore = false;
   late final AdFreePurchaseController _adFreeController;
   late final TrialAccessController _trialController;
+  late final ReviewAccessController _reviewController;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Both controllers share the same installation ID. Paid purchases do not
+    // All entitlement controllers share one installation ID. Paid purchases do not
     // require a Google account or depend on the trial service.
     final purchaseCache = SignedOfflineEntitlementStore();
     _adFreeController = AdFreePurchaseController(offlineStore: purchaseCache);
@@ -58,9 +61,16 @@ class _TtsMobileAppState extends State<TtsMobileApp>
         deviceIdProvider: purchaseCache.getDeviceId,
       ),
     );
+    _reviewController = ReviewAccessController(
+      store: SignedReviewEntitlementStore(
+        deviceIdProvider: purchaseCache.getDeviceId,
+      ),
+    );
+    _reviewController.addListener(_onPurchaseChanged);
     _trialController.addListener(_onPurchaseChanged);
     _adFreeController.addListener(_onPurchaseChanged);
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      unawaited(_reviewController.refresh(force: true));
       unawaited(_trialController.initialize());
       unawaited(_adFreeController.initialize());
     }
@@ -75,6 +85,7 @@ class _TtsMobileAppState extends State<TtsMobileApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      unawaited(_reviewController.refresh(force: true));
       unawaited(_trialController.refresh());
       unawaited(_adFreeController.refreshEntitlement());
     }
@@ -83,6 +94,8 @@ class _TtsMobileAppState extends State<TtsMobileApp>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _reviewController.removeListener(_onPurchaseChanged);
+    _reviewController.dispose();
     _trialController.removeListener(_onPurchaseChanged);
     _trialController.dispose();
     _adFreeController.removeListener(_onPurchaseChanged);
@@ -170,6 +183,7 @@ class _TtsMobileAppState extends State<TtsMobileApp>
       themeMode: _themeMode,
       onThemeModeChanged: _changeThemeMode,
       adFreeController: _adFreeController,
+      reviewController: _reviewController,
       trialController:
           !kIsWeb && defaultTargetPlatform == TargetPlatform.android
           ? _trialController

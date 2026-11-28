@@ -4,6 +4,8 @@ param(
     [string]$JavaBin = 'C:\Program Files\Android\Android Studio\jbr\bin',
     [switch]$InternalTestBilling,
     [switch]$EntitlementDiagnostics,
+    [ValidateRange(1, 2100000000)]
+    [int]$BuildNumber,
     [string]$PurchaseVerifierUrl = $env:YOMIPALETTE_BILLING_VERIFY_URL,
     [string]$IntegrityProjectNumber = $env:YOMIPALETTE_PLAY_INTEGRITY_PROJECT_NUMBER,
     [string]$OfflineGrantPublicKey = $env:YOMIPALETTE_OFFLINE_GRANT_PUBLIC_KEY,
@@ -11,7 +13,10 @@ param(
     [string]$GoogleWebClientId = $env:YOMIPALETTE_GOOGLE_WEB_CLIENT_ID,
     [string]$TrialVerifierUrl = $env:YOMIPALETTE_TRIAL_VERIFY_URL,
     [string]$TrialGrantPublicKey = $env:YOMIPALETTE_TRIAL_GRANT_PUBLIC_KEY,
-    [string]$TrialGrantKeyId = $env:YOMIPALETTE_TRIAL_GRANT_KEY_ID
+    [string]$TrialGrantKeyId = $env:YOMIPALETTE_TRIAL_GRANT_KEY_ID,
+    [string]$ReviewAccessUrl = $env:YOMIPALETTE_REVIEW_ACCESS_URL,
+    [string]$ReviewGrantPublicKey = $env:YOMIPALETTE_REVIEW_GRANT_PUBLIC_KEY,
+    [string]$ReviewGrantKeyId = $env:YOMIPALETTE_REVIEW_GRANT_KEY_ID
 )
 $ErrorActionPreference = 'Stop'
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -31,6 +36,9 @@ try {
     $env:ORG_GRADLE_PROJECT_PLAY_RELEASE = 'true'
     $env:ORG_GRADLE_PROJECT_PLAY_SIGNING_PROPERTIES = [IO.Path]::GetFullPath($SigningProperties)
     $flutterArgs = @('build', 'appbundle', '--release')
+    if ($PSBoundParameters.ContainsKey('BuildNumber')) {
+        $flutterArgs += "--build-number=$BuildNumber"
+    }
     if ($InternalTestBilling) {
         # A QA-only AAB: explicitly unverified Billing flow.
         # Never promote it to the production track.
@@ -81,6 +89,24 @@ try {
             $flutterArgs += "--dart-define=YOMIPALETTE_TRIAL_GRANT_PUBLIC_KEY=$TrialGrantPublicKey"
             $flutterArgs += "--dart-define=YOMIPALETTE_TRIAL_GRANT_KEY_ID=$TrialGrantKeyId"
             Write-Warning 'ISOLATED STAGING TRIAL TEST BUNDLE: never promote to a public Play release.'
+        }
+    }
+    if (![string]::IsNullOrWhiteSpace($ReviewAccessUrl)) {
+        $reviewUri = $null
+        if (![uri]::TryCreate($ReviewAccessUrl, [UriKind]::Absolute, [ref]$reviewUri) -or
+            $reviewUri.Scheme -ne 'https' -or $reviewUri.AbsolutePath -ne '/review' -or
+            $reviewUri.UserInfo -ne '' -or $reviewUri.Query -ne '' -or $reviewUri.Fragment -ne '') {
+            throw 'ReviewAccessUrl must be an HTTPS /review endpoint without credentials, query or fragment.'
+        }
+        $flutterArgs += "--dart-define=YOMIPALETTE_REVIEW_ACCESS_URL=$ReviewAccessUrl"
+        if (![string]::IsNullOrWhiteSpace($ReviewGrantPublicKey) -or
+            ![string]::IsNullOrWhiteSpace($ReviewGrantKeyId)) {
+            if ($ReviewGrantPublicKey -cnotmatch '^[A-Za-z0-9_-]{43}$' -or
+                $ReviewGrantKeyId -cnotmatch '^[A-Za-z0-9_-]{1,32}$') {
+                throw 'Configure both review grant public key and key ID.'
+            }
+            $flutterArgs += "--dart-define=YOMIPALETTE_REVIEW_GRANT_PUBLIC_KEY=$ReviewGrantPublicKey"
+            $flutterArgs += "--dart-define=YOMIPALETTE_REVIEW_GRANT_KEY_ID=$ReviewGrantKeyId"
         }
     }
     if ($EntitlementDiagnostics) {

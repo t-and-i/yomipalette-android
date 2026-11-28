@@ -10,19 +10,31 @@ import 'tts_provider.dart';
 /// notice. The package owns the DRM and websocket compatibility layer so it can
 /// be updated independently of this app.
 class EdgeProvider implements TtsProvider {
+  EdgeProvider({FlutterEdgeTts Function(String voice)? clientFactory})
+    : _clientFactory = clientFactory ?? _createClient;
+
+  final FlutterEdgeTts Function(String voice) _clientFactory;
+
+  static FlutterEdgeTts _createClient(String voice) => FlutterEdgeTts(
+    voice: voice,
+    outputFormat: EdgeTtsOutputFormat.audio24Khz48KbitrateMonoMp3,
+  );
+
   static const _defaultVoice = 'en-US-EmmaMultilingualNeural';
 
   @override
   Future<List<VoiceInfo>> listVoices() async {
-    final client = FlutterEdgeTts(voice: _defaultVoice);
+    final client = _clientFactory(_defaultVoice);
     try {
       final voices = await client.getVoices();
       return voices
-          .map((voice) => VoiceInfo(
-                name: voice.shortName,
-                locale: voice.locale,
-                gender: voice.gender,
-              ))
+          .map(
+            (voice) => VoiceInfo(
+              name: voice.shortName,
+              locale: voice.locale,
+              gender: voice.gender,
+            ),
+          )
           .toList(growable: false);
     } finally {
       await client.close();
@@ -37,10 +49,7 @@ class EdgeProvider implements TtsProvider {
     double volume = 0,
     double pitch = 0,
   }) async {
-    final client = FlutterEdgeTts(
-      voice: voice,
-      outputFormat: EdgeTtsOutputFormat.audio24Khz48KbitrateMonoMp3,
-    );
+    final client = _clientFactory(voice);
     try {
       final result = await client.synthesize(
         text,
