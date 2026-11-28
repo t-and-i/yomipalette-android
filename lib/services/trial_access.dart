@@ -1,78 +1,205 @@
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-/// Local 30 x 24-hour trial. Device-local storage does not defend against
-/// app-data deletion, reinstall, rooted devices, or a manipulated system clock.
+import 'signed_trial_cache.dart';
+import 'entitlement_diagnostics.dart';
+import 'purchase_verifier.dart' show billingQaMode;
+import 'trial_verifier.dart';
+
+/// Server-owned 30-day trial. Google login is required for new trial grants;
+/// buying full_access in Google Play remains completely independent of login.
 class TrialAccessController extends ChangeNotifier {
-  TrialAccessController({DateTime Function()? clock})
-    : _clock = clock ?? DateTime.now;
+  TrialAccessController({
+    TrialEntitlementStore? store,
+    TrialIdentityProvider? identity,
+    TrialVerifier? verifier,
+    DateTime Function()? clock,
+    this._allowQaTrial = billingQaMode,
+  }) : _store = store ?? SignedTrialEntitlementStore(),
+       _identity = identity ?? GoogleTrialIdentityProvider(),
+       _verifier = verifier ?? createTrialVerifier(),
+       _ownsVerifier = verifier == null,
+       _clock = clock ?? DateTime.now;
 
   static const duration = Duration(days: 30);
-  static const startedKey = 'trial_started_at_ms_v1';
-  static const lastSeenKey = 'trial_last_seen_ms_v1';
-
+  final TrialEntitlementStore _store;
+  final TrialIdentityProvider _identity;
+  final TrialVerifier _verifier;
+  final bool _ownsVerifier;
+  final bool _allowQaTrial;
   final DateTime Function() _clock;
-  DateTime? _started;
-  DateTime? _lastSeen;
+
   bool _initialized = false;
   bool _disposed = false;
+  bool _busy = false;
+  bool _blocked = false;
+  bool _expiredFromServer = false;
+  DateTime? _lastServerAttempt;
+  String? _message;
 
   bool get initialized => _initialized;
-  DateTime? get startedAt => _started;
-  DateTime? get expiresAt => _started?.add(duration);
+  bool get busy => _busy;
   bool get isActive =>
+      _initialized && (_allowQaTrial || (_store.hasValidGrant && !_blocked));
+  bool get isExpired =>
       _initialized &&
-      _started != null &&
-      _lastSeen != null &&
-      _lastSeen!.isBefore(expiresAt!);
-  bool get isExpired => _initialized && !isActive;
+      !_allowQaTrial &&
+      (_expiredFromServer ||
+          _blocked ||
+          (expiresAt != null && !_clock().toUtc().isBefore(expiresAt!)));
+  DateTime? get startedAt => _store.startedAt;
+  DateTime? get expiresAt => _store.expiresAt;
+  String? get message => _message;
+  bool get canSignIn =>
+      !_busy &&
+      _verifier is! UnconfiguredTrialVerifier &&
+      googleTrialWebClientId.isNotEmpty;
 
   int get daysRemaining {
-    if (!isActive) return 0;
-    return (expiresAt!.difference(_lastSeen!).inMilliseconds /
+    final expiry = expiresAt;
+    if (_allowQaTrial) return 30;
+    if (!isActive || expiry == null) return 0;
+    return (expiry.difference(_clock().toUtc()).inMilliseconds /
             Duration.millisecondsPerDay)
-        .ceil();
+        .ceil()
+        .clamp(0, 30);
+  }
+
+  void _notify() {
+    if (!_disposed) notifyListeners();
   }
 
   Future<void> initialize() async {
     if (_initialized) return;
-    final prefs = await SharedPreferences.getInstance();
-    final now = _clock().toUtc();
-    final storedStart = prefs.getInt(startedKey);
-    // Do not accept an invalid timestamp as a fresh trial.
-    final start = storedStart == null
-        ? now
-        : DateTime.fromMillisecondsSinceEpoch(storedStart, isUtc: true);
-    if (storedStart == null) {
-      await prefs.setInt(startedKey, start.millisecondsSinceEpoch);
+    try {
+      await _store.initialize();
+      _initialized = true;
+      _notify();
+      // Existing signed trial can be used without network or Google sign-in.
+      // Try silently refreshing it near its short offline expiration.
+      await _refreshSilentlyIfNeeded();
+    } catch (_) {
+      // No trial access on storage failure; purchase verification remains usable.
+      _initialized = true;
+      _message = 'trialUnavailable';
+      _notify();
     }
-    _started = start;
-    _initialized = true;
-    await refresh();
   }
 
   Future<void> refresh() async {
     if (!_initialized) return;
-    final prefs = await SharedPreferences.getInstance();
+    try {
+      await _store.refresh();
+    } catch (_) {
+      _message = 'trialUnavailable';
+    }
+    _notify();
+    await _refreshSilentlyIfNeeded();
+  }
+
+  Future<void> _refreshSilentlyIfNeeded() async {
+    if (_busy ||
+        !_initialized ||
+        _blocked ||
+        _verifier is UnconfiguredTrialVerifier) {
+      return;
+    }
+    final grantEnd = _store.grantExpiresAt;
+    if (grantEnd == null ||
+        grantEnd.difference(_clock().toUtc()) > const Duration(hours: 24)) {
+      return;
+    }
     final now = _clock().toUtc();
-    final storedLastSeen = prefs.getInt(lastSeenKey);
-    final last = storedLastSeen == null
-        ? _started!
-        : DateTime.fromMillisecondsSinceEpoch(storedLastSeen, isUtc: true);
-    // A backwards clock change must never increase remaining time.
-    final effective = [
-      _started!,
-      last,
-      now,
-    ].reduce((a, b) => a.isAfter(b) ? a : b);
-    _lastSeen = effective;
-    await prefs.setInt(lastSeenKey, effective.millisecondsSinceEpoch);
-    if (!_disposed) notifyListeners();
+    if (_lastServerAttempt != null &&
+        now.difference(_lastServerAttempt!) < const Duration(minutes: 3)) {
+      return;
+    }
+    _lastServerAttempt = now;
+    await _verify(silent: true);
+  }
+
+  Future<void> signIn() => _verify(silent: false);
+
+  Future<void> _verify({required bool silent}) async {
+    if (_busy || !_initialized || _verifier is UnconfiguredTrialVerifier) {
+      return;
+    }
+    _busy = true;
+    if (!silent) _message = null;
+    _notify();
+    try {
+      entitlementTrace(EntitlementEvent.trialIdentityStarted);
+      final idToken = silent
+          ? await _identity.signInSilently()
+          : await _identity.signIn();
+      if (idToken == null || idToken.isEmpty) {
+        entitlementTrace(EntitlementEvent.trialIdTokenMissing);
+        if (!silent) _message = 'trialSignInError';
+        return;
+      }
+      entitlementTrace(EntitlementEvent.trialIdTokenReady);
+      final deviceId = await _store.getDeviceId();
+      entitlementTrace(EntitlementEvent.trialDeviceReady);
+      final result = await _verifier.verify(
+        idToken: idToken,
+        deviceId: deviceId,
+      );
+      switch (result.status) {
+        case TrialVerificationStatus.active:
+          if (result.grant == null || !await _store.accept(result.grant!)) {
+            entitlementTrace(EntitlementEvent.trialGrantRejected);
+            _message = 'trialUnavailable';
+            break;
+          }
+          entitlementTrace(EntitlementEvent.trialGrantAccepted);
+          _blocked = false;
+          _expiredFromServer = false;
+          _message = null;
+          break;
+        case TrialVerificationStatus.expired:
+          await _store.clear();
+          _expiredFromServer = true;
+          _message = null;
+          break;
+        case TrialVerificationStatus.blocked:
+          await _store.clear();
+          _blocked = true;
+          _message = 'trialBlocked';
+          break;
+        case TrialVerificationStatus.unavailable:
+          if (!silent) _message = 'trialUnavailable';
+          break;
+      }
+    } catch (_) {
+      entitlementTrace(EntitlementEvent.trialControllerFailed);
+      if (!silent) _message = 'trialSignInError';
+    } finally {
+      _busy = false;
+      _notify();
+    }
+  }
+
+  Future<void> signOut() async {
+    if (_busy) return;
+    _busy = true;
+    _notify();
+    try {
+      await _identity.signOut();
+      await _store.clear();
+      _expiredFromServer = false;
+      _blocked = false;
+      _message = null;
+    } catch (_) {
+      _message = 'trialSignInError';
+    } finally {
+      _busy = false;
+      _notify();
+    }
   }
 
   @override
   void dispose() {
     _disposed = true;
+    if (_ownsVerifier) _verifier.dispose();
     super.dispose();
   }
 }

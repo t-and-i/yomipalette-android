@@ -178,7 +178,7 @@ class SignedOfflineEntitlementStore implements OfflineEntitlementStore {
 
   @override
   Future<void> rememberPurchase(String productId, String token) async {
-    if ((productId != 'full_access' && productId != 'remove_ads') ||
+    if (productId != 'full_access' ||
         token.length < 8 ||
         token.length > 4096 ||
         _claims == null ||
@@ -284,8 +284,7 @@ class SignedOfflineEntitlementStore implements OfflineEntitlementStore {
       if (json['v'] != 1 ||
           json['kid'] != _keyId ||
           json['pkg'] != _expectedPackage ||
-          (json['productId'] != 'full_access' &&
-              json['productId'] != 'remove_ads') ||
+          json['productId'] != 'full_access' ||
           json['deviceId'] != _deviceId ||
           json['receiptHash'] is! String ||
           !RegExp(r'^[0-9a-f]{64}$').hasMatch(json['receiptHash'] as String) ||

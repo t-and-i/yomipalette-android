@@ -1,6 +1,7 @@
 import { getPlayAccessToken } from './oauth.js';
 import { verifyPlayIntegrity, INTEGRITY_SCOPE } from './play-integrity.js';
 import { handleRtdn } from './rtdn.js';
+import { handleTrial } from './trial.js';
 import { allowVerifyIp, allowVerifyToken } from './rate-limits.js';
 import { issueOfflineGrant, validDeviceId } from './offline-grants.js';
 import {
@@ -104,6 +105,16 @@ export async function handleRequest(request, env, {
   const url = new URL(request.url);
   if (url.pathname === '/rtdn') {
     return handleRtdn(request, env, { now, fetchImpl, getAccessToken });
+  }
+  if (url.pathname === '/trial') {
+    if (request.method !== 'POST') return json(405, { error: 'method_not_allowed' });
+    try {
+      if (!await allowVerifyIp(env, request)) return rateLimited();
+      const payload = await readBoundedJson(request);
+      return handleTrial(payload, env, { now, fetchImpl, getAccessToken });
+    } catch {
+      return json(503, { status: 'unavailable' });
+    }
   }
   if (url.pathname !== '/verify') return json(404, { error: 'not_found' });
   if (request.method !== 'POST') return json(405, { error: 'method_not_allowed' });

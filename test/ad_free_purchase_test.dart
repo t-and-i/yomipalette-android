@@ -199,56 +199,54 @@ void main() {
     restored.dispose();
   });
 
-  test('old remove_ads receipts still unlock full access', () async {
+  test('retired remove_ads receipts are ignored', () async {
     final fake = FakeBilling();
+    final verifier = FakeVerifier(PurchaseVerificationResult.verified);
     final controller = AdFreePurchaseController(
       gateway: fake,
-      verifier: FakeVerifier(PurchaseVerificationResult.verified),
+      verifier: verifier,
     );
     await controller.initialize();
     await controller.handleUpdates([
-      record(PurchaseStatus.restored, id: legacyAdFreeProductId),
+      record(PurchaseStatus.restored, id: 'remove_ads'),
     ]);
-    expect(controller.isLicensed, isTrue);
+    expect(controller.isLicensed, isFalse);
+    expect(verifier.calls, 0);
     controller.dispose();
     await fake.controller.close();
   });
 
-  testWidgets('expired trial requires purchase and keeps file settings', (
-    tester,
-  ) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    addTearDown(() => debugDefaultTargetPlatformOverride = null);
-    FlutterSecureStorage.setMockInitialValues({});
-    final start = DateTime.utc(2026, 11, 1);
-    final trial = TrialAccessController(
-      clock: () => start.add(const Duration(days: 31)),
-    );
-    SharedPreferences.setMockInitialValues({
-      TrialAccessController.startedKey: start.millisecondsSinceEpoch,
-    });
-    await trial.initialize();
-    final fake = FakeBilling();
-    final purchase = AdFreePurchaseController(gateway: fake);
-    await purchase.initialize();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: HomeScreen(
-          onLocaleChanged: (_) {},
-          adFreeController: purchase,
-          trialController: trial,
+  testWidgets(
+    'unregistered trial requires Google sign-in and keeps file settings',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      FlutterSecureStorage.setMockInitialValues({});
+      final trial = TrialAccessController(allowQaTrial: false);
+      await trial.initialize();
+      final fake = FakeBilling();
+      final purchase = AdFreePurchaseController(gateway: fake);
+      await purchase.initialize();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HomeScreen(
+            onLocaleChanged: (_) {},
+            adFreeController: purchase,
+            trialController: trial,
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.textContaining('30-day free trial has ended'), findsOneWidget);
-    expect(find.text('Choose file'), findsOneWidget);
-    expect(find.text('Generate MP3'), findsNothing);
-    await tester.pumpWidget(const SizedBox.shrink());
-    purchase.dispose();
-    trial.dispose();
-    await fake.controller.close();
-  });
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Choose a Google account'), findsOneWidget);
+      expect(find.text('Choose file'), findsOneWidget);
+      expect(find.text('Generate MP3'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      purchase.dispose();
+      trial.dispose();
+      await fake.controller.close();
+      debugDefaultTargetPlatformOverride = null;
+    },
+  );
 
   test('empty receipt does not grant or acknowledge', () async {
     final fake = FakeBilling();

@@ -7,7 +7,11 @@ param(
     [string]$PurchaseVerifierUrl = $env:YOMIPALETTE_BILLING_VERIFY_URL,
     [string]$IntegrityProjectNumber = $env:YOMIPALETTE_PLAY_INTEGRITY_PROJECT_NUMBER,
     [string]$OfflineGrantPublicKey = $env:YOMIPALETTE_OFFLINE_GRANT_PUBLIC_KEY,
-    [string]$OfflineGrantKeyId = $env:YOMIPALETTE_OFFLINE_GRANT_KEY_ID
+    [string]$OfflineGrantKeyId = $env:YOMIPALETTE_OFFLINE_GRANT_KEY_ID,
+    [string]$GoogleWebClientId = $env:YOMIPALETTE_GOOGLE_WEB_CLIENT_ID,
+    [string]$TrialVerifierUrl = $env:YOMIPALETTE_TRIAL_VERIFY_URL,
+    [string]$TrialGrantPublicKey = $env:YOMIPALETTE_TRIAL_GRANT_PUBLIC_KEY,
+    [string]$TrialGrantKeyId = $env:YOMIPALETTE_TRIAL_GRANT_KEY_ID
 )
 $ErrorActionPreference = 'Stop'
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -51,6 +55,33 @@ try {
         }
         $flutterArgs += "--dart-define=YOMIPALETTE_OFFLINE_GRANT_PUBLIC_KEY=$OfflineGrantPublicKey"
         $flutterArgs += "--dart-define=YOMIPALETTE_OFFLINE_GRANT_KEY_ID=$OfflineGrantKeyId"
+        # Production trial requires a configured Google OAuth Web client ID.
+        if ($GoogleWebClientId -notmatch '^[0-9]+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$') {
+            throw 'Production AAB blocked: configure YOMIPALETTE_GOOGLE_WEB_CLIENT_ID with the Google OAuth Web client ID.'
+        }
+        $flutterArgs += "--dart-define=YOMIPALETTE_GOOGLE_WEB_CLIENT_ID=$GoogleWebClientId"
+        if (![string]::IsNullOrWhiteSpace($TrialVerifierUrl)) {
+            # Internal Play track only. Public purchase verification remains
+            # on -PurchaseVerifierUrl with the production purchase public key.
+            $trialUri = $null
+            if (![uri]::TryCreate($TrialVerifierUrl, [UriKind]::Absolute, [ref]$trialUri) -or
+                $trialUri.Scheme -ne 'https' -or
+                $trialUri.AbsolutePath -ne '/trial' -or
+                $trialUri.Query -ne '' -or
+                $trialUri.Fragment -ne '' -or
+                $trialUri.UserInfo -ne '' -or
+                $TrialGrantPublicKey -cnotmatch '^[A-Za-z0-9_-]{43}$' -or
+                $TrialGrantKeyId -cnotmatch '^[A-Za-z0-9_-]{1,32}$') {
+                throw 'Isolated trial endpoint requires HTTPS /trial, a valid trial Ed25519 public key, and key ID.'
+            }
+            if ($TrialVerifierUrl -eq $PurchaseVerifierUrl) {
+                throw 'Trial verifier must be different from production paid verifier for isolated staging test.'
+            }
+            $flutterArgs += "--dart-define=YOMIPALETTE_TRIAL_VERIFY_URL=$TrialVerifierUrl"
+            $flutterArgs += "--dart-define=YOMIPALETTE_TRIAL_GRANT_PUBLIC_KEY=$TrialGrantPublicKey"
+            $flutterArgs += "--dart-define=YOMIPALETTE_TRIAL_GRANT_KEY_ID=$TrialGrantKeyId"
+            Write-Warning 'ISOLATED STAGING TRIAL TEST BUNDLE: never promote to a public Play release.'
+        }
     }
     if ($EntitlementDiagnostics) {
         $flutterArgs += '--dart-define=YOMIPALETTE_ENTITLEMENT_DIAGNOSTICS=true'

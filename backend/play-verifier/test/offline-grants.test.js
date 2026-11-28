@@ -3,7 +3,7 @@ import test from 'node:test';
 import { generateKeyPairSync, verify as verifyEd25519 } from 'node:crypto';
 
 import { handleRequest } from '../src/worker.js';
-import { PACKAGE_NAME, PRODUCT_ID, LEGACY_PRODUCT_ID } from '../src/play-api.js';
+import { PACKAGE_NAME, PRODUCT_ID } from '../src/play-api.js';
 import { tokenHash } from '../src/revocations.js';
 import { OFFLINE_GRANT_SECONDS, issueOfflineGrant } from '../src/offline-grants.js';
 
@@ -116,14 +116,13 @@ test('Ed25519 grant includes strict scope, purchase hash and 72-hour expiry', as
   assert.equal(response.bodyUsed, true);
 });
 
-test('legacy remove_ads gets a device-bound signed grant', async () => {
-  const ctx = context({ productId: LEGACY_PRODUCT_ID });
+test('retired remove_ads product is rejected without granting entitlement', async () => {
+  const ctx = context();
   const response = await handleRequest(
-    makeRequest({ productId: LEGACY_PRODUCT_ID }), ctx.env, ctx.deps,
+    makeRequest({ productId: 'remove_ads' }), ctx.env, ctx.deps,
   );
-  assert.equal(response.status, 200);
-  const claims = decodeGrant((await response.json()).offlineGrant);
-  assert.equal(claims.productId, LEGACY_PRODUCT_ID);
+  assert.equal(response.status, 400);
+  assert.equal(ctx.googleCalls, 0);
 });
 
 test('v1 clients retain existing verified response without offline fields', async () => {
