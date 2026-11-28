@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:in_app_purchase/in_app_purchase.dart';
 
 import 'offline_entitlement_cache.dart';
+import 'entitlement_diagnostics.dart';
 
 /// A QA-only escape hatch. Never enable it in a production Play release.
 const bool billingQaMode = bool.fromEnvironment(
@@ -129,6 +130,7 @@ class BackendPurchaseVerifier
     );
     final token = purchase.verificationData.serverVerificationData;
     if (token.isEmpty) {
+      entitlementTrace(EntitlementEvent.verifyMissingReceipt);
       return const PurchaseVerificationOutcome(
         PurchaseVerificationResult.rejected,
       );
@@ -168,8 +170,11 @@ class BackendPurchaseVerifier
       final integrityToken = await _integrityToken(requestHash)
           .timeout(const Duration(seconds: 60));
       if (integrityToken == null || integrityToken.isEmpty) {
+        entitlementTrace(EntitlementEvent.verifyIntegrityUnavailable);
         return unavailable;
       }
+      entitlementTrace(EntitlementEvent.verifyIntegrityReady);
+      entitlementTrace(EntitlementEvent.verifyWorkerRequest);
 
       final response = await _client
           .post(
@@ -185,9 +190,29 @@ class BackendPurchaseVerifier
             }),
           )
           .timeout(const Duration(seconds: 40));
-      if (response.statusCode != 200) return unavailable;
+      if (response.statusCode != 200) {
+        entitlementTrace(EntitlementEvent.verifyWorkerHttpFailed);
+        return unavailable;
+      }
       final body = jsonDecode(response.body);
-      if (body is! Map<String, dynamic>) return unavailable;
+      if (body is! Map<String, dynamic>) {
+        entitlementTrace(EntitlementEvent.verifyWorkerResponseInvalid);
+        return unavailable;
+      }
+      switch (body['status']) {
+        case 'verified':
+          entitlementTrace(
+            body['offlineGrant'] is String
+                ? EntitlementEvent.verifyWorkerSignedGrantPresent
+                : EntitlementEvent.verifyWorkerSignedGrantMissing,
+          );
+          break;
+        case 'rejected':
+          entitlementTrace(EntitlementEvent.verifyWorkerRejected);
+          break;
+        default:
+          entitlementTrace(EntitlementEvent.verifyWorkerUnavailable);
+      }
       return switch (body['status']) {
         'verified' => PurchaseVerificationOutcome(
           PurchaseVerificationResult.verified,
@@ -201,6 +226,7 @@ class BackendPurchaseVerifier
         _ => unavailable,
       };
     } catch (_) {
+      entitlementTrace(EntitlementEvent.verifyException);
       return unavailable;
     }
   }

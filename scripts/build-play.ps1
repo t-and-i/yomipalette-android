@@ -3,6 +3,7 @@ param(
     [string]$SigningProperties = (Join-Path $env:USERPROFILE '.android\yomipalette-signing\key.properties'),
     [string]$JavaBin = 'C:\Program Files\Android\Android Studio\jbr\bin',
     [switch]$InternalTestBilling,
+    [switch]$EntitlementDiagnostics,
     [string]$PurchaseVerifierUrl = $env:YOMIPALETTE_BILLING_VERIFY_URL,
     [string]$IntegrityProjectNumber = $env:YOMIPALETTE_PLAY_INTEGRITY_PROJECT_NUMBER,
     [string]$OfflineGrantPublicKey = $env:YOMIPALETTE_OFFLINE_GRANT_PUBLIC_KEY,
@@ -50,6 +51,10 @@ try {
         }
         $flutterArgs += "--dart-define=YOMIPALETTE_OFFLINE_GRANT_PUBLIC_KEY=$OfflineGrantPublicKey"
         $flutterArgs += "--dart-define=YOMIPALETTE_OFFLINE_GRANT_KEY_ID=$OfflineGrantKeyId"
+    }
+    if ($EntitlementDiagnostics) {
+        $flutterArgs += '--dart-define=YOMIPALETTE_ENTITLEMENT_DIAGNOSTICS=true'
+        Write-Host 'INTERNAL TEST DIAGNOSTICS ENABLED: do not promote this AAB to public Play.'
     }
     & flutter @flutterArgs
     if ($LASTEXITCODE -ne 0) { throw 'Play AAB build failed; do not use a previous output.' }
